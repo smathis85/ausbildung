@@ -48,7 +48,7 @@ function input(string $label,string $name,mixed $value='',string $type='text',st
     return '<label>'.h($label).'<input type="'.h($type).'" name="'.h($name).'" value="'.h($value).'" '.$extra.'></label>';
 }
 function head(string $title,bool $auth=true): void {
-    echo '<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>'.h($title).' · Ausbildung</title><link rel="stylesheet" href="/assets/app.css"><script defer src="/assets/app.js"></script></head><body><header><a class="brand" href="/">Ausbildung <small>VG Selters'.(TRAINING_PRODUCTION?'':' · DEV').'</small></a>';
+    echo '<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>'.h($title).' · Ausbildung</title><link rel="stylesheet" href="/assets/app.css?v=logo1"><script defer src="/assets/app.js"></script></head><body><header><a class="brand" href="/"><img class="brand-logo" src="/assets/vg-selters-logo.png" width="44" height="51" alt="Wappen der Verbandsgemeinde Selters"><span>Ausbildung <small>VG Selters'.(TRAINING_PRODUCTION?'':' · DEV').'</small></span></a>';
     if($auth) echo '<nav aria-label="Hauptnavigation"><a href="/">Übersicht</a><a href="/?page=lessons">Termine</a><a href="/?page=import">Importprüfung</a><a href="/?page=account">Zugang</a><form method="post">'.csrf().'<input type="hidden" name="action" value="logout"><button class="subtle">Abmelden</button></form></nav>';
     echo '</header><main><h1>'.h($title).'</h1>';
     if(isset($_SESSION['flash'])) { echo '<p class="notice" role="status">'.h($_SESSION['flash']).'</p>'; unset($_SESSION['flash']); }

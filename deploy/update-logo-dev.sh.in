@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+set -euo pipefail
+umask 077
+[[ $(id -u) == 0 ]] || { echo 'Bitte mit sudo ausführen.'; exit 1; }
+stage=/home/einsatzadmin/ausbildung-logo-dev-stage
+app=/opt/ausbildung-dev
+site=/etc/nginx/sites-available/ausbildung-dev.einsatzleiter.app
+[[ -f "$app/.ausbildung-dev-owned" ]] || exit 1
+[[ $(sha256sum "$stage/update.tar" | cut -d' ' -f1) == '@@CODE_SHA@@' ]] || exit 1
+exec 9>/run/lock/ausbildung-dev-update.lock
+flock -n 9 || exit 1
+tmp=$(mktemp -d)
+trap 'rm -rf "$tmp"' EXIT
+tar --no-same-owner -xf "$stage/update.tar" -C "$tmp"
+check_old() {
+    local current new
+    current=$(sha256sum "$1" | cut -d' ' -f1)
+    new=$(sha256sum "$2" | cut -d' ' -f1)
+    [[ "$current" == "$3" || "$current" == "$new" ]] || { echo 'Abweichender DEV-Stand; Abbruch.'; exit 1; }
+}
+check_old "$site" "$tmp/deploy/nginx.conf" 4896b8982b28194250b12f835e5e7214592503fd29daaa22ce0440bbaaf31d1b
+check_old "$app/public/index.php" "$tmp/public/index.php" 5c328854287c3b6395d3dd33926a95775e69eaff5fbf6a0aaf52ad2af437ea1d
+check_old "$app/public/assets/app.css" "$tmp/public/assets/app.css" 0ca8699fbb5dde4ae82ce74b0b3292fd349e2e555a719958d5d241fd63dd3452
+php -l "$tmp/public/index.php"
+install -d -o root -g root -m 0700 /var/backups/ausbildung-dev-code
+tar -czf "/var/backups/ausbildung-dev-code/before-logo-$(date +%Y%m%d%H%M%S).tar.gz" -C "$app" public
+cp -a "$site" "$tmp/nginx.before"
+install -o root -g root -m 0644 "$tmp/deploy/nginx.conf" "$site"
+if ! nginx -t; then cp -a "$tmp/nginx.before" "$site"; exit 1; fi
+for file in public/assets/vg-selters-logo.png public/assets/app.css public/index.php; do
+    install -o root -g root -m 0644 "$tmp/$file" "$app/$file.next"
+    mv "$app/$file.next" "$app/$file"
+done
+systemctl reload nginx
+systemctl reload php8.3-fpm
+curl --fail --silent --show-error https://ausbildung-dev.einsatzleiter.app/assets/vg-selters-logo.png -o "$tmp/served.png"
+cmp "$tmp/served.png" "$app/public/assets/vg-selters-logo.png"
+echo 'Logo auf Ausbildungs-DEV eingerichtet. Produktion und Daten unverändert.'
