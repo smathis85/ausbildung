@@ -1,6 +1,8 @@
 <?php
 declare(strict_types=1);
 require __DIR__.'/../app/Store.php';
+require __DIR__.'/../app/ParticipantAccess.php';
+require __DIR__.'/../app/ParticipantOverview.php';
 use Ausbildung\Store;
 date_default_timezone_set('Europe/Berlin');
 umask(0077);
@@ -51,7 +53,7 @@ function head(string $title,bool $auth=true): void {
     echo '</header><main><h1>'.h($title).'</h1>';
     if(isset($_SESSION['flash'])) { echo '<p class="notice" role="status">'.h($_SESSION['flash']).'</p>'; unset($_SESSION['flash']); }
 }
-function foot(): void { echo '</main><footer>Eigenständige Ausbildungsverwaltung'.(TRAINING_PRODUCTION?'':' · Testumgebung').' · Nur für deinen Zugang</footer></body></html>'; }
+function foot(): void { echo '</main><footer>Eigenständige Ausbildungsverwaltung'.(TRAINING_PRODUCTION?'':' · Testumgebung').'</footer></body></html>'; }
 try {
     $s=new Store($dataDir.'/training.sqlite');
     $account=$s->one('SELECT * FROM accounts WHERE id=1');
@@ -60,11 +62,32 @@ try {
 $page=is_string($_GET['page']??null)?$_GET['page']:'dashboard';
 $auth=isset($_SESSION['uid']) && (int)$_SESSION['uid']===1 && ($_SESSION['version']??null)===(int)$account['version'] && time()-($_SESSION['seen']??0)<7200 && time()-($_SESSION['created']??0)<43200;
 if($auth) $_SESSION['seen']=time(); else unset($_SESSION['uid']);
+$access=new Ausbildung\ParticipantAccess($s);
+$participantAuth=!$auth&&isset($_SESSION['participant_id'])&&time()-($_SESSION['seen']??0)<3600&&time()-($_SESSION['created']??0)<28800&&$access->sessionValid((int)$_SESSION['participant_id'],(int)($_SESSION['participant_version']??0));
+if($participantAuth)$_SESSION['seen']=time();else unset($_SESSION['participant_id']);
 $error=null;
 if($_SERVER['REQUEST_METHOD']==='POST') {
     try {
         if(!is_string($_POST['csrf']??null)||!hash_equals($_SESSION['csrf'],$_POST['csrf'])) { http_response_code(403); throw new RuntimeException('Die Sitzung ist abgelaufen. Bitte Seite neu laden.'); }
         $action=field('action','',40);
+        if($action==='participant_login'){
+            $page='participant-login';
+            $key=hash('sha256','participant:'.($_SERVER['REMOTE_ADDR']??'unknown'));
+            $s->transaction(function()use($s,$key){
+                $s->run('DELETE FROM rate_limits WHERE started<?',[time()-900]);
+                $r=$s->one('SELECT * FROM rate_limits WHERE key=?',[$key]);
+                if($r&&(int)$r['attempts']>=10){http_response_code(429);throw new RuntimeException('Zu viele Versuche. Bitte in 15 Minuten erneut versuchen.');}
+                $s->run('INSERT INTO rate_limits(key,attempts,started) VALUES(?,1,?) ON CONFLICT(key) DO UPDATE SET attempts=attempts+1',[$key,time()]);
+            });
+            $first=field('first_name','',100);$last=field('last_name','',100);$code=field('access_code','',128);$department=field('department','',120);
+            $resolved=$s->transaction(function()use($access,$first,$last,$code,$department){return ['id'=>$access->resolve($first,$last,$code,$department),'version'=>(int)$access->settings()['version']];});
+            if(!$resolved['id'])throw new RuntimeException('Anmeldung nicht möglich. Prüfe Namen, Ausbildungscode und gegebenenfalls Feuerwehr.');
+            $s->run('DELETE FROM rate_limits WHERE key=?',[$key]);
+            session_regenerate_id(true);$_SESSION=['participant_id'=>$resolved['id'],'participant_version'=>$resolved['version'],'seen'=>time(),'created'=>time(),'csrf'=>bin2hex(random_bytes(32))];go('/?page=me');
+        }
+        if($action==='participant_logout'){
+            $_SESSION=[];session_destroy();setcookie(session_name(),'', ['expires'=>1,'path'=>'/','secure'=>!$local,'httponly'=>true,'samesite'=>'Strict']);go('/?page=participant-login');
+        }
         if(in_array($action,['login','setup'],true)) {
             $key=hash('sha256',($_SERVER['REMOTE_ADDR']??'unknown'));
             $s->transaction(function()use($s,$key){
@@ -89,7 +112,11 @@ if($_SERVER['REQUEST_METHOD']==='POST') {
             $s->run('DELETE FROM rate_limits WHERE key=?',[$key]);
             session_regenerate_id(true); $_SESSION=['uid'=>1,'version'=>(int)$account['version'],'seen'=>time(),'created'=>time(),'csrf'=>bin2hex(random_bytes(32))]; go('/');
         }
-        if(!$auth) { http_response_code(401); throw new RuntimeException('Bitte zuerst anmelden.'); }
+        if(!$auth) { http_response_code($participantAuth?403:401); throw new RuntimeException('Dieser Vorgang ist nur für die Ausbildungsverwaltung erlaubt.'); }
+        if($action==='participant_access'){
+            $access->configure(isset($_POST['enabled']),field('access_code','',128),number('access_version',1,PHP_INT_MAX));
+            $_SESSION['flash']='Teilnehmerzugang gespeichert. Bestehende Teilnehmeranmeldungen wurden beendet.';go('/?page=account');
+        }
         if($action==='logout') { $_SESSION=[]; session_destroy(); setcookie(session_name(),'', ['expires'=>1,'path'=>'/','secure'=>!$local,'httponly'=>true,'samesite'=>'Strict']); go('/'); }
         if($action==='password') {
             if(!password_verify(field('current_password','',256),$account['password_hash'])) throw new RuntimeException('Aktuelles Passwort nicht korrekt.');
@@ -155,9 +182,11 @@ if($_SERVER['REQUEST_METHOD']==='POST') {
     catch(RuntimeException $e) { $error=$e->getMessage(); }
     catch(Throwable $e) { http_response_code(500);$error='Speichern nicht möglich. Es wurden keine unvollständigen Änderungen übernommen.'; }
 }
+require __DIR__.'/../app/participant-pages.php';
 if(!$auth) {
     $setup=$page==='setup'&&!$account['password_hash']; head($setup?'Zugang einrichten':'Willkommen',false);
-    echo '<section class="auth card"><h2>'.($setup?'Dein persönlicher Zugang':'Ausbildungsverwaltung').'</h2><p>Geschützter Bereich für die Ausbildung der Feuerwehr VG Selters.</p>';
+    if(!$setup)echo '<section class="card auth"><h2>Meine Teilnahmen</h2><p>Für Kameradinnen und Kameraden: mit Name und gemeinsamem Ausbildungscode anmelden.</p><a class="button" href="/?page=participant-login">Zur Teilnehmeranmeldung</a></section>';
+    echo '<section class="auth card"><h2>'.($setup?'Dein persönlicher Zugang':'Admin-Anmeldung').'</h2><p>Geschützter Bereich für die Ausbildung der Feuerwehr VG Selters.</p>';
     if($error)echo '<p class="error" role="alert">'.h($error).'</p>';
     echo '<form method="post">'.csrf().'<input type="hidden" name="action" value="'.($setup?'setup':'login').'">'.input('E-Mail-Adresse','email','','email','required autocomplete="username"');
     if($setup) echo input('Einmaliger Einrichtungscode','setup_code','','password','required autocomplete="off"');
@@ -236,5 +265,9 @@ if($page==='import') {
     foreach($s->rows('SELECT e.*,p.first_name,p.last_name FROM enrollments e JOIN participants p ON p.id=e.participant_id WHERE e.adjustment<>0 AND EXISTS(SELECT 1 FROM enrollments z WHERE z.participant_id=e.participant_id AND z.year<e.year) ORDER BY e.year,p.last_name')as $e)echo '<tr><td><a href="/?page=person&id='.$e['participant_id'].'&year='.$e['year'].'">'.h($e['last_name'].', '.$e['first_name']).'</a></td><td>'.$e['year'].'</td><td>'.sprintf('%+d',$e['adjustment']).'</td><td>'.h($e['source_carry']).'</td></tr>';
     echo '</tbody></table></div></section><details class="card"><summary>Letzte Verwaltungsänderungen</summary><ul>';foreach($s->rows('SELECT at,event FROM audit ORDER BY id DESC LIMIT 30')as $a)echo '<li>'.h($a['at'].' · '.$a['event']).'</li>';echo '</ul></details>';
 }
-if($page==='account')echo '<section class="card auth"><h2>Passwort ändern</h2><p>'.h($account['email']).'</p><p>Der Zugang ist von Einsatzleiter.app unabhängig. Ein Passwortwechsel gilt ausschließlich hier.</p><form method="post">'.csrf().'<input type="hidden" name="action" value="password">'.input('Aktuelles Passwort','current_password','','password','required autocomplete="current-password"').input('Neues Passwort (mindestens 12 Zeichen)','password','','password','required minlength="12" autocomplete="new-password"').input('Neues Passwort wiederholen','password_confirmation','','password','required autocomplete="new-password"').'<button>Passwort ändern und abmelden</button></form></section>';
+if($page==='account'){
+    $c=$access->settings();
+    echo '<section class="card"><h2>Zentraler Ausbildungscode</h2><p>Ein gemeinsamer Code für alle Teilnehmer. Wer den Code kennt, kann durch Eingabe eines anderen Namens auch dessen Übersicht aufrufen. Schreibzugriff und interne Bemerkungen bleiben der Verwaltung vorbehalten.</p><p>Status: <strong>'.($c['enabled']?'Freigeschaltet':'Gesperrt').'</strong></p><form method="post">'.csrf().'<input type="hidden" name="action" value="participant_access"><input type="hidden" name="access_version" value="'.$c['version'].'">'.input($c['code_hash']?'Neuer Code (leer lassen, um den bestehenden zu behalten)':'Ausbildungscode festlegen','access_code','','password','minlength="8" maxlength="128" autocomplete="new-password"').'<p class="muted">Mindestens 8 Zeichen. Der Code wird geschützt gespeichert und nicht wieder angezeigt. Eine Änderung oder Sperrung beendet bestehende Teilnehmeranmeldungen.</p><label class="check"><input type="checkbox" name="enabled" '.($c['enabled']?'checked':'').'> Teilnehmerzugang freischalten</label><button>Teilnehmerzugang speichern</button></form><p><a href="/?page=participant-login">Teilnehmeranmeldung</a> (zum Testen zuerst abmelden oder ein privates Browserfenster verwenden)</p></section>';
+    echo '<section class="card auth"><h2>Passwort ändern</h2><p>'.h($account['email']).'</p><p>Der Zugang ist von Einsatzleiter.app unabhängig. Ein Passwortwechsel gilt ausschließlich hier.</p><form method="post">'.csrf().'<input type="hidden" name="action" value="password">'.input('Aktuelles Passwort','current_password','','password','required autocomplete="current-password"').input('Neues Passwort (mindestens 12 Zeichen)','password','','password','required minlength="12" autocomplete="new-password"').input('Neues Passwort wiederholen','password_confirmation','','password','required autocomplete="new-password"').'<button>Passwort ändern und abmelden</button></form></section>';
+}
 foot();

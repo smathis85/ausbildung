@@ -21,6 +21,8 @@ CREATE TABLE IF NOT EXISTS attendance(participant_id INTEGER NOT NULL,lesson_id 
 CREATE TABLE IF NOT EXISTS audit(id INTEGER PRIMARY KEY,at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,event TEXT NOT NULL,entity TEXT,entity_id INTEGER,details TEXT NOT NULL DEFAULT '{}');
 CREATE TABLE IF NOT EXISTS imports(id INTEGER PRIMARY KEY,source_hash TEXT NOT NULL UNIQUE,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,summary TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS rate_limits(key TEXT PRIMARY KEY,attempts INTEGER NOT NULL,started INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS participant_access(id INTEGER PRIMARY KEY CHECK(id=1),code_hash TEXT,enabled INTEGER NOT NULL DEFAULT 0,version INTEGER NOT NULL DEFAULT 1);
+INSERT OR IGNORE INTO participant_access(id) VALUES(1);
 SQL);
     }
     public function rows(string $sql,array $params=[]): array { $q=$this->db->prepare($sql); $q->execute($params); return $q->fetchAll(); }
