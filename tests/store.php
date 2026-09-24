@@ -22,6 +22,6 @@ try{
  $s->saveAttendance(1,1,[]);check($s->total(1,2025)===10&&$s->total(1,2026)===12,'History corrections propagate');
  $s->saveAttendance(2,1,[]);check($s->total(1,2026)===11,'Below threshold');
  check($s->participants(2026)[0]['total']===11,'Dashboard and detail agree');
- check((int)$s->one('SELECT COUNT(*) n FROM audit')['n']===5,'Audit covers committed changes only');
+ check((int)$s->one('SELECT COUNT(*) n FROM audit')['n']===6,'Audit covers committed changes only');
  echo "PASS: import, totals, threshold, units, idempotency, conflicts, rollback, history and audit\n";
 }finally{unset($s);unlink($dir.'/test.sqlite');rmdir($dir);}

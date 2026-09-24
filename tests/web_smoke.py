@@ -57,6 +57,19 @@ try:
   assert 'data-status="'+expected+'"' in view
   if expected=='completed':assert '>Abgeschlossen</span>' in view
  db.close()
+ # Checkbox POST archives the qualified person and preserves the legacy note.
+ db=sqlite3.connect(data+'/training.sqlite')
+ db.execute("UPDATE enrollments SET reported='Legacy note',exam_label='bestanden' WHERE participant_id=1 AND year=2026");db.commit()
+ _,view,_=get('/?page=person&id=1&year=2026')
+ assert 'type="checkbox" name="reported_confirmed"' in view
+ assert 'name="reported"' not in view
+ def formvalue(name):return re.search('name="'+name+'" value="([^"]+)"',view).group(1)
+ fields={'action':'person','csrf':token(view),'id':1,'year':2026,'first_name':'Alex','last_name':'Beispiel','department':'Musterwehr','adjustment':11,'adjustment_reason':'Test only','exam_date':'','reported_confirmed':'1','person_version':formvalue('person_version'),'enrollment_version':formvalue('enrollment_version')}
+ status,view,_=get('/?page=person&id=1&year=2026',fields)
+ assert status==200 and 'Dieser Teilnehmer ist archiviert' in view
+ assert db.execute('SELECT archived FROM participants WHERE id=1').fetchone()[0]==1
+ assert db.execute('SELECT reported,reported_confirmed,exam_label FROM enrollments WHERE participant_id=1 AND year=2026').fetchone()==('Legacy note',1,'bestanden')
+ db.execute('UPDATE participants SET archived=0 WHERE id=1');db.execute("UPDATE enrollments SET exam_date=NULL,exam_label='',reported_confirmed=0 WHERE participant_id=1 AND year=2026");db.commit();db.close()
  # CRUD and annual rollover use synthetic data only.
  status,body,_=get('/?page=person&year=2026')
  fields={'action':'person','csrf':token(body),'id':0,'year':2026,'first_name':'<script>Test</script>','last_name':'Neu','department':'Musterwehr','adjustment':0,'adjustment_reason':''}

@@ -24,6 +24,40 @@ CREATE TABLE IF NOT EXISTS rate_limits(key TEXT PRIMARY KEY,attempts INTEGER NOT
 CREATE TABLE IF NOT EXISTS participant_access(id INTEGER PRIMARY KEY CHECK(id=1),code_hash TEXT,enabled INTEGER NOT NULL DEFAULT 0,version INTEGER NOT NULL DEFAULT 1);
 INSERT OR IGNORE INTO participant_access(id) VALUES(1);
 SQL);
+        $this->transaction(function() {
+            $columns=array_column($this->rows('PRAGMA table_info(enrollments)'),'name');
+            if(!in_array('reported_confirmed',$columns,true)) {
+                $this->db->exec('ALTER TABLE enrollments ADD COLUMN reported_confirmed INTEGER NOT NULL DEFAULT 0 CHECK(reported_confirmed IN (0,1))');
+                foreach($this->rows("SELECT participant_id,year,reported FROM enrollments WHERE reported<>''") as $row) {
+                    if(self::legacyReportedConfirmed($row['reported']))$this->run('UPDATE enrollments SET reported_confirmed=1,version=version+1 WHERE participant_id=? AND year=?',[$row['participant_id'],$row['year']]);
+                }
+                $this->audit('reported_checkbox_migrated');
+                $this->archiveCompletedParticipants();
+            }
+        });
+    }
+    public static function legacyReportedConfirmed(string $value): bool {
+        $value=trim($value);
+        if(in_array(mb_strtolower($value),['x','ja','yes','1','true','✓','✔'],true))return true;
+        foreach(['!Y-m-d H:i:s','!Y-m-d','!d.m.Y'] as $format){
+            $date=\DateTimeImmutable::createFromFormat($format,$value);
+            $errors=\DateTimeImmutable::getLastErrors();
+            if($date&&($errors===false||($errors['warning_count']===0&&$errors['error_count']===0)))return true;
+        }
+        return false;
+    }
+    /** Called inside the surrounding write transaction; never deletes history. */
+    public function archiveCompletedParticipants(?int $onlyId=null): int {
+        $candidates=$this->rows("SELECT p.id,MAX(e.year) AS year FROM participants p JOIN enrollments e ON e.participant_id=p.id WHERE p.archived=0".($onlyId!==null?' AND p.id=?':'')." GROUP BY p.id",$onlyId!==null?[$onlyId]:[]);
+        $count=0;
+        foreach($candidates as $p){
+            if($this->total((int)$p['id'],(int)$p['year'])<12)continue;
+            if(!$this->one("SELECT year FROM enrollments WHERE participant_id=? AND reported_confirmed=1 AND (COALESCE(exam_date,'')<>'' OR TRIM(exam_label)<>'') LIMIT 1",[$p['id']]))continue;
+            $this->run('UPDATE participants SET archived=1,version=version+1 WHERE id=? AND archived=0',[$p['id']]);
+            $this->audit('participant_auto_archived','participant',(int)$p['id'],['year'=>(int)$p['year'],'reason'=>'passed_exam_twelve_participations_reported']);
+            $count++;
+        }
+        return $count;
     }
     public function rows(string $sql,array $params=[]): array { $q=$this->db->prepare($sql); $q->execute($params); return $q->fetchAll(); }
     public function one(string $sql,array $params=[]): ?array { return $this->rows($sql,$params)[0]??null; }
@@ -65,8 +99,10 @@ SQL);
             foreach($data['enrollments'] as $e) {
                 $this->run('INSERT INTO enrollments(participant_id,year,adjustment,adjustment_reason,source_carry,source_total,start_label,start_date,course,exam_date,exam_label,reported,comment) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)',[$people[$e['person']],$e['year'],$e['adjustment'],$e['adjustment_reason'],$e['source_carry'],$e['source_total'],$e['start_label'],$e['start_date'],$e['course'],$e['exam_date'],$e['exam_label'],$e['reported'],$e['comment']]);
             }
+            foreach($data['enrollments'] as $e)if(self::legacyReportedConfirmed($e['reported']))$this->run('UPDATE enrollments SET reported_confirmed=1 WHERE participant_id=? AND year=?',[$people[$e['person']],$e['year']]);
             foreach($data['attendance'] as $a) $this->run('INSERT INTO attendance(participant_id,lesson_id) VALUES(?,?)',[$people[$a['person']],$lessons[$a['session']]]);
             foreach($data['enrollments'] as $e) if($this->total($people[$e['person']],$e['year'])!==$e['source_total']) throw new RuntimeException('Importabgleich fehlgeschlagen.');
+            $this->archiveCompletedParticipants();
             $summary=['people'=>count($people),'lessons'=>count($lessons),'attendance'=>count($data['attendance']),'adjustments'=>count($data['warnings']),'years'=>$data['summary']];
             $this->run('INSERT INTO imports(source_hash,summary) VALUES(?,?)',[$data['source_sha256'],json_encode($summary,JSON_THROW_ON_ERROR)]);
             $this->audit('excel_import','import',(int)$this->db->lastInsertId(),$summary);
@@ -83,6 +119,7 @@ SQL);
             foreach(array_diff($before,$selected) as $id) $this->run('DELETE FROM attendance WHERE lesson_id=? AND participant_id=?',[$lessonId,$id]);
             foreach(array_diff($selected,$before) as $id) $this->run('INSERT INTO attendance(participant_id,lesson_id) VALUES(?,?)',[$id,$lessonId]);
             $this->run('UPDATE lessons SET version=version+1 WHERE id=?',[$lessonId]);
+            foreach(array_unique(array_merge($before,$selected)) as $participantId)$this->archiveCompletedParticipants((int)$participantId);
             $this->audit('attendance_saved','lesson',$lessonId,['added'=>array_values(array_diff($selected,$before)),'removed'=>array_values(array_diff($before,$selected))]);
         });
     }
