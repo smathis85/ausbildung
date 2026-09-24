@@ -1,5 +1,11 @@
-# Wappen im Seitenkopf
+# Logo deployment
 
-Originaldatei logo-20260828221513.png unverändert als public/assets/vg-selters-logo.png eingebunden. Gemeinsamer Kopf zeigt das Wappen neben Ausbildung auf Übersicht, Admin-, Teilnehmer-Anmeldung und persönlicher Teilnehmerübersicht. CSS-Breite 44px, mobil 38px, natürliche Proportionen; beschreibender Alttext. CSS-Versionierung für vorhandene Browsercaches. Nginx erhält ausschließlich eine exakte öffentliche Route zur Logo-Datei; private Dateien bleiben gesperrt.
+The supplied Selters crest appears in the shared header on overview and participant pages.
+Desktop width 44px, mobile 38px; natural aspect ratio.
+The fixed public asset route `/?asset=brand-logo` serves only the bundled PNG,
+before sessions or database access. No path from user input is used.
+This works with existing production nginx rules. Static PNG nginx rules are optional.
 
-Syntax geprüft; Desktop- und Smartphoneübersicht mit künstlichen Daten im Browser angesehen. Keine Datenänderung oder neuen Berechtigungen. Zunächst DEV, da für diese neue Änderung keine Produktionsfreigabe vorliegt. Branch dev-logo. Updatepaket /home/einsatzadmin/ausbildung-logo-dev-stage/update.sh benötigt Root für Anwendungsdateien und neue statische Nginx-Route. Aktueller Status: vorbereitet, administrative DEV-Installation ausstehend.
+User approved all outstanding changes for main/production. Deployment uses the
+project update access, with no database changes. Synthetic participant HTTP checks
+and PHP syntax checks passed before deployment.
