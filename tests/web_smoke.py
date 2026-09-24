@@ -32,7 +32,7 @@ try:
  status,body,_=get('/?page=setup',{'action':'setup','csrf':token(body),'email':'sascha.mathis@ffvgs.de','setup_code':'wrong','password':'Demo-only-pass-123','password_confirmation':'Demo-only-pass-123'})
  assert 'ungültig' in body
  status,body,_=get('/?page=setup',{'action':'setup','csrf':token(body),'email':'sascha.mathis@ffvgs.de','setup_code':'TEST-SETUP-ONLY','password':'Demo-only-pass-123','password_confirmation':'Demo-only-pass-123'})
- assert status==200 and 'Beispiel' in body and 'Noch 1 Teilnahme' in body
+ assert status==200 and 'Beispiel' in body and '10 Teilnahmen erreicht · prüfungsberechtigt' in body
  for page in ['person&id=1&year=2026','lessons','lesson&id=1','import','account']:
   status,view,_=get('/?page='+page);assert status==200,(page,status)
  status,body,_=get('/?page=lesson&id=1')
@@ -42,6 +42,16 @@ try:
  status,body,_=get('/?page=lesson&id=1',{'action':'attendance','csrf':token(body),'id':1,'version':1})
  assert 'zwischenzeitlich' in body
  assert '12 Teilnahmen erreicht' in get('/')[1]
+ # Check the eligibility boundary and retained 12-participation milestone.
+ import sqlite3
+ db=sqlite3.connect(data+'/training.sqlite')
+ for total,expected in [(9,'pending'),(10,'ready10'),(11,'ready10'),(12,'ready')]:
+  db.execute('UPDATE enrollments SET adjustment=? WHERE participant_id=1 AND year=2026',(total-1,));db.commit()
+  _,view,_=get('/')
+  assert 'data-status="'+expected+'"' in view,(total,expected)
+  assert '<option value="ready10">10 Teilnahmen erreicht</option>' in view
+  _,csv,_=get('/?page=export&year=2026');assert 'Fehlend bis 10' in csv
+ db.close()
  # CRUD and annual rollover use synthetic data only.
  status,body,_=get('/?page=person&year=2026')
  fields={'action':'person','csrf':token(body),'id':0,'year':2026,'first_name':'<script>Test</script>','last_name':'Neu','department':'Musterwehr','adjustment':0,'adjustment_reason':''}

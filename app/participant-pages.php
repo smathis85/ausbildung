@@ -13,7 +13,7 @@ if($participantAuth){
     echo '<div class="toolbar"><p>'.h($p['first_name'].' '.$p['last_name'].' · '.$p['department']).'</p><form method="post">'.csrf().'<input type="hidden" name="action" value="participant_logout"><button class="secondary">Abmelden</button></form></div>';
     if($error)echo '<p class="error" role="alert">'.h($error).'</p>';
     if($latest){
-        echo '<section class="card"><h2>Dein Ausbildungsstand</h2><div class="person-total"><strong>'.$latest['total'].' / 12</strong><span class="badge '.($latest['eligible']?'ready':'').'">'.($latest['eligible']?'12 Teilnahmen erreicht':'Noch '.$latest['missing'].' '.($latest['missing']===1?'Teilnahme':'Teilnahmen')).'</span></div><p>Gesamtstand bis einschließlich '.$latest['year'].'. Für die Prüfungszulassung sind 12 Teilnahmen erforderlich.</p>';
+        echo '<section class="card"><h2>Dein Ausbildungsstand</h2><div class="person-total"><strong>'.$latest['total'].' / 10</strong><span class="badge '.($latest['eligible']?'ready':'').'">'.($latest['eligible']?($latest['total']>=12?'12 Teilnahmen erreicht · prüfungsberechtigt':'10 Teilnahmen erreicht · prüfungsberechtigt'):'Noch '.$latest['missing'].' '.($latest['missing']===1?'Teilnahme':'Teilnahmen')).'</span></div><p>Gesamtstand bis einschließlich '.$latest['year'].'. Für die Prüfungszulassung sind 10 Teilnahmen erforderlich.</p>';
         if($latest['exam_passed'])echo '<p class="badge passed">Prüfung bestanden'.($latest['exam_date']?' am '.h(date('d.m.Y',strtotime($latest['exam_date']))):'').'</p>';
         echo '</section>';
     }else echo '<p>Noch keine Ausbildungsstände hinterlegt.</p>';

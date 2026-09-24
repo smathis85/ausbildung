@@ -29,7 +29,7 @@ try:
  assert '<select name="department">' in body and body.count('value="Musterwehr"')==1
  assert 'name="department" value=' not in body
  status,body=login(participant,'incorrect');assert 'Anmeldung nicht möglich' in body and 'Beispiel' not in body
- status,body=login(participant,'Common-test-2026');assert status==200 and 'Alex Beispiel' in body and '11 / 12' in body
+ status,body=login(participant,'Common-test-2026');assert status==200 and 'Alex Beispiel' in body and '11 / 10' in body and '10 Teilnahmen erreicht' in body
  assert 'INTERNAL-ADMIN' not in body and 'CSV exportieren' not in body and 'name="action" value="person"' not in body
  for path in ['/?page=person&id=1&year=2026','/?page=person&id=2&year=2026','/?page=account','/?page=export&year=2026','/?page=import','/?page=lesson&id=1','/?page=lessons']:
   status,body=req(participant,path);assert status==403,(path,status);assert 'INTERNAL-ADMIN' not in body
