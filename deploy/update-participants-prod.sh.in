@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+set -euo pipefail
+umask 077
+[[ $(id -u) == 0 ]] || { echo 'Bitte mit sudo ausführen.'; exit 1; }
+stage=/home/einsatzadmin/ausbildung-participants-prod-stage
+app=/opt/ausbildung
+data=/var/lib/ausbildung
+[[ -f "$app/.ausbildung-prod-owned" && -f "$data/training.sqlite" ]] || { echo 'Vorhandene Ausbildungs-Produktionsinstallation fehlt.'; exit 1; }
+[[ $(sha256sum "$stage/update.tar" | cut -d' ' -f1) == '@@CODE_SHA@@' ]] || { echo 'Paket-Prüfsumme stimmt nicht.'; exit 1; }
+exec 9>/run/lock/ausbildung-prod-install.lock
+flock -n 9 || { echo 'Update läuft bereits.'; exit 1; }
+tmp=$(mktemp -d /tmp/ausbildung-update.XXXXXX)
+trap 'rm -rf "$tmp"' EXIT
+tar -tf "$stage/update.tar" | grep -Eq '(^/|(^|/)\.\.(/|$))' && exit 1
+tar --no-same-owner -xf "$stage/update.tar" -C "$tmp"
+for file in app/Store.php app/ParticipantAccess.php app/ParticipantOverview.php app/participant-pages.php public/index.php; do php -l "$tmp/$file"; done
+runuser -u ausbildung -- env TRAINING_DATA_DIR="$data" php "$app/bin/backup.php"
+install -d -o root -g root -m 0700 /var/backups/ausbildung-code
+tar -czf "/var/backups/ausbildung-code/before-participants-$(date +%Y%m%d%H%M%S).tar.gz" -C "$app" app public bin
+# Store change only adds an idempotent schema definition; old routes still work.
+install -o root -g root -m 0644 "$tmp/app/Store.php" "$app/app/Store.php.next"
+mv "$app/app/Store.php.next" "$app/app/Store.php"
+runuser -u ausbildung -- env TRAINING_DATA_DIR="$data" php "$app/bin/manage.php" init
+for file in app/ParticipantAccess.php app/ParticipantOverview.php app/participant-pages.php public/index.php; do
+    install -o root -g root -m 0644 "$tmp/$file" "$app/$file.next"
+    mv "$app/$file.next" "$app/$file"
+done
+systemctl reload php8.3-fpm
+curl --fail --silent --show-error --resolve ausbildung.einsatzleiter.app:443:127.0.0.1 https://ausbildung.einsatzleiter.app/ -o "$tmp/login.html"
+grep -q 'Zur Teilnehmeranmeldung' "$tmp/login.html"
+curl --fail --silent --show-error --resolve ausbildung.einsatzleiter.app:443:127.0.0.1 'https://ausbildung.einsatzleiter.app/?page=participant-login' -o "$tmp/participant.html"
+grep -q 'Teilnehmeranmeldung' "$tmp/participant.html"
+echo 'Teilnehmerzugang auf Produktion bereit. Als Admin unter Zugang den zentralen Code setzen und Teilnehmerzugang freischalten.'
+echo 'Ausbildungs-DEV und Einsatzleiter.app wurden nicht verändert.'
