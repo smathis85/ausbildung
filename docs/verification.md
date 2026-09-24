@@ -27,7 +27,7 @@ SQLite-Integrität erfolgreich, keine Fremdschlüsselfehler. Sicherungsroutine m
 
 Privates Paket: /home/einsatzadmin/ausbildung-dev-stage (0700), Datenimportdatei 0600. Installer mit festen SHA-256-Prüfsummen, DNS-/Zertifikatsprüfung, getrenntem FPM-Pool, separatem Nginx-vhost und täglicher lokaler Sicherung (14 Stände). Installer-Shellsyntax geprüft. Vollständige Nginx-/FPM-Konfigurationsprüfung findet vor Reload als Root im Installer statt.
 
-Noch erforderlich: DNS-A-Record ausbildung-dev.einsatzleiter.app auf 31.70.130.202, administrative Ausführung des bereitgestellten Installers und danach HTTPS-/Dateischutzprüfung auf der realen Adresse. Abschließend Ersteinrichtung durch Sascha selbst. Bestehende Main-/DEV-Einsatzleiter-Checkouts unverändert bei 4ad8b44.
+Nach Rückmeldung „bereit“ am 24.09.2026 bestätigt: DNS zeigt auf 31.70.130.202, HTTPS liefert HTTP 200. Eigener vhost, FPM-Pool und täglicher Sicherungsauftrag vorhanden; Nginx, PHP-FPM und Cron aktiv. Datenverzeichnis gehört ausbildung-dev mit 0700, Anwendungscode root mit 0755. Session-Cookie Secure/HttpOnly/SameSite=Strict, Antworten no-store und mit CSP. Einrichtung noch offen. Direkte Aufrufe der Datenbank, Importdatei, PHP-Quelldateien und .git/config liefern 404. Teilnehmer, Importansicht und CSV verlangen ohne Sitzung Anmeldung. Main-/DEV-Einsatzleiter-Checkouts weiterhin unverändert bei 4ad8b44. Ausstehend ist nur die persönliche Ersteinrichtung durch Sascha; der Einrichtungscode wurde nicht gelesen.
 
 ## Fortsetzung
 
