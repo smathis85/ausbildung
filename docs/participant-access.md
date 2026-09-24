@@ -4,6 +4,8 @@ Vom Benutzer ausdrücklich gewählt: Vorname, Nachname und ein gemeinsamer Ausbi
 
 ## Bedienung
 
+Nachtrag: Feuerwehr in der Teilnehmeranmeldung als alphabetisches Auswahlfeld aus den aktiven Teilnehmern der Datenbank. Leerwerte und nach Unicode-/Leerraum-/Großschreibungsnormalisierung doppelte Bezeichnungen werden ausgelassen. Auswahl optional; Serverzuordnung prüft die gewählte Feuerwehr weiterhin. Für Main/Prod ausdrücklich freigegeben, Syntax und Teilnehmer-HTTP-Regression erfolgreich. Enges Ein-Datei-Update /home/einsatzadmin/ausbildung-feuerwehr-prod-stage/update.sh vorbereitet; administrativer Produktionsschritt noch ausstehend. Vorherige Datei wird gesichert, keine Datenbank-/Codeänderung am zentralen Zugangscode.
+
 Als Admin unter Zugang einen Code mit 8–128 Zeichen setzen und Teilnehmerzugang freischalten. Standardmäßig ausgeschaltet. Code wird nur als Hash gespeichert (SHA-256 vor password_hash vermeidet Bcrypt-Längenabschneidung) und nie wieder im Klartext angezeigt oder protokolliert. Code leer lassen erhält einen bestehenden Code. Änderungen und Sperrung erhöhen eine Versionsnummer und beenden bestehende Teilnehmeranmeldungen.
 
 Öffentliche Startseite enthält getrennte Einstiege für Teilnehmer und Admin. Teilnehmer melden sich unter /?page=participant-login an und sehen unter /?page=me ausschließlich die zum aufgelösten Namen gehörenden Daten. Namen werden Unicode-normalisiert, ohne Beachtung von Groß-/Kleinschreibung und äußerem/mehrfachem Leerraum verglichen. Bei Namensgleichheit ist optional die Feuerwehr erforderlich. Bleibt die Zuordnung mehrdeutig, wird kein Datensatz gewählt. Archivierte Personen erhalten keinen Zugang.

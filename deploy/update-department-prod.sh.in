@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+set -euo pipefail
+umask 077
+[[ $(id -u) == 0 ]] || { echo 'Bitte mit sudo ausführen.'; exit 1; }
+stage=/home/einsatzadmin/ausbildung-feuerwehr-prod-stage
+target=/opt/ausbildung/app/participant-pages.php
+[[ -f /opt/ausbildung/.ausbildung-prod-owned ]] || exit 1
+exec 9>/run/lock/ausbildung-prod-install.lock
+flock -n 9 || { echo 'Update läuft bereits.'; exit 1; }
+expected='@@CODE_SHA@@'
+[[ $(sha256sum "$stage/participant-pages.php" | cut -d' ' -f1) == "$expected" ]] || { echo 'Paket-Prüfsumme falsch.'; exit 1; }
+old=$(sha256sum "$target" | cut -d' ' -f1)
+[[ "$old" == 5b3662484d5457e07e6a6967cca475ebb24cc20d8e8bed744e1df9db41357270 || "$old" == "$expected" ]] || { echo 'Unerwarteter Produktionsstand; bitte prüfen.'; exit 1; }
+php -l "$stage/participant-pages.php"
+if [[ "$old" != "$expected" ]]; then
+    install -d -o root -g root -m 0700 /var/backups/ausbildung-code
+    cp -a "$target" "/var/backups/ausbildung-code/participant-pages-before-dropdown-$(date +%Y%m%d%H%M%S).php"
+    install -o root -g root -m 0644 "$stage/participant-pages.php" "$target.next"
+    mv "$target.next" "$target"
+    systemctl reload php8.3-fpm
+fi
+tmp=$(mktemp)
+trap 'rm -f "$tmp"' EXIT
+curl --fail --silent --show-error --resolve ausbildung.einsatzleiter.app:443:127.0.0.1 'https://ausbildung.einsatzleiter.app/?page=participant-login' -o "$tmp"
+grep -qE '<select name="department">|Teilnehmerzugang ist derzeit nicht freigeschaltet' "$tmp"
+echo 'Feuerwehr-Auswahlfeld auf Produktion eingerichtet. Daten und zentraler Code unverändert.'

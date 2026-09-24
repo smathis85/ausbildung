@@ -29,6 +29,16 @@ if(!$auth&&in_array($page,['participant-login','me'],true)){
     echo '<section class="card auth"><h2>Teilnehmeranmeldung</h2><p>Gib deinen Namen und den gemeinsamen Ausbildungscode ein.</p>';
     if($error)echo '<p class="error" role="alert">'.h($error).'</p>';
     if(!$access->settings()['enabled'])echo '<p>Der Teilnehmerzugang ist derzeit nicht freigeschaltet.</p>';
-    else echo '<form method="post">'.csrf().'<input type="hidden" name="action" value="participant_login">'.input('Vorname','first_name','','text','required maxlength="100" autocomplete="given-name"').input('Nachname','last_name','','text','required maxlength="100" autocomplete="family-name"').input('Zentraler Ausbildungscode','access_code','','password','required maxlength="128" autocomplete="off"').input('Feuerwehr (nur bei gleichem Namen erforderlich)','department','','text','maxlength="120"').'<button>Anmelden</button></form>';
+    else {
+        $departments=[];
+        foreach($s->rows("SELECT DISTINCT TRIM(department) AS department FROM participants WHERE archived=0 AND TRIM(department)<>''")as$row){
+            $departments[Ausbildung\ParticipantAccess::normalize($row['department'])]=$row['department'];
+        }
+        $departments=array_values($departments);(new Collator('de_DE'))->sort($departments);
+        $selectedDepartment=is_string($_POST['department']??null)?Ausbildung\ParticipantAccess::normalize($_POST['department']):'';
+        echo '<form method="post">'.csrf().'<input type="hidden" name="action" value="participant_login">'.input('Vorname','first_name','','text','required maxlength="100" autocomplete="given-name"').input('Nachname','last_name','','text','required maxlength="100" autocomplete="family-name"').input('Zentraler Ausbildungscode','access_code','','password','required maxlength="128" autocomplete="off"').'<label>Feuerwehr (nur bei gleichem Namen erforderlich)<select name="department"><option value="">Bitte auswählen (optional)</option>';
+        foreach($departments as$department)echo '<option value="'.h($department).'" '.($selectedDepartment===Ausbildung\ParticipantAccess::normalize($department)?'selected':'').'>'.h($department).'</option>';
+        echo '</select></label><button>Anmelden</button></form>';
+    }
     echo '<p><a href="/">Zur Admin-Anmeldung</a></p></section>';foot();exit;
 }

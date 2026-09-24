@@ -25,6 +25,9 @@ try:
  _,body=req(admin,'/?page=account');csrf=token(body)
  _,body=req(admin,'/?page=account',{'csrf':csrf,'action':'participant_access','access_version':1,'access_code':'Common-test-2026','enabled':'on'})
  assert 'Teilnehmerzugang gespeichert' in body and 'Common-test-2026' not in body
+ _,body=req(participant,'/?page=participant-login')
+ assert '<select name="department">' in body and body.count('value="Musterwehr"')==1
+ assert 'name="department" value=' not in body
  status,body=login(participant,'incorrect');assert 'Anmeldung nicht möglich' in body and 'Beispiel' not in body
  status,body=login(participant,'Common-test-2026');assert status==200 and 'Alex Beispiel' in body and '11 / 12' in body
  assert 'INTERNAL-ADMIN' not in body and 'CSV exportieren' not in body and 'name="action" value="person"' not in body
