@@ -19,6 +19,7 @@ final class ParticipantOverview
                 'year'=>(int)$year['year'],
                 'annual'=>$this->store->annual($participantId,(int)$year['year']),
                 'total'=>$n,'missing'=>max(0,10-$n),'eligible'=>$n>=10,
+                'completed'=>$n>=12&&(bool)($year['exam_date']||$year['exam_label']),
                 'exam_passed'=>(bool)($year['exam_date']||$year['exam_label']),
                 'exam_date'=>$year['exam_date'],
             ];

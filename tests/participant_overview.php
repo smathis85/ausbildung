@@ -18,6 +18,13 @@ foreach([9=>false,10=>true,11=>true,12=>true] as $total=>$eligible){
     $row=$overview->forAuthenticatedParticipant(2)['years'][0];
     if($row['eligible']!==$eligible||$row['missing']!==max(0,10-$total))throw new RuntimeException('Eligibility boundary failed');
 }
+foreach([9,10,11,12,13] as $total){
+    foreach(['none','date','label'] as $exam){
+        $s->run('UPDATE enrollments SET adjustment=?,exam_date=?,exam_label=? WHERE participant_id=2',[$total,$exam==='date'?'2026-09-24':null,$exam==='label'?'bestanden':'']);
+        $row=$overview->forAuthenticatedParticipant(2)['years'][0];
+        if($row['completed']!==($total>=12&&$exam!=='none'))throw new RuntimeException('Completion boundary failed');
+    }
+}
 $s->run('UPDATE participants SET archived=1 WHERE id=1');
 if($overview->forAuthenticatedParticipant(1)!==null||$overview->forAuthenticatedParticipant(999)!==null)throw new RuntimeException('Unknown or archived participant exposed');
 echo "PASS: personal overview, 10-participation threshold, no other participants or admin notes, archived access denied\n";

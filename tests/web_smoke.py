@@ -51,6 +51,11 @@ try:
   assert 'data-status="'+expected+'"' in view,(total,expected)
   assert '<option value="ready10">10 Teilnahmen erreicht</option>' in view
   _,csv,_=get('/?page=export&year=2026');assert 'Fehlend bis 10' in csv
+ for total,exam,expected in [(11,'2026-09-24','passed'),(12,'2026-09-24','completed'),(12,None,'ready')]:
+  db.execute('UPDATE enrollments SET adjustment=?,exam_date=? WHERE participant_id=1 AND year=2026',(total-1,exam));db.commit()
+  _,view,_=get('/')
+  assert 'data-status="'+expected+'"' in view
+  if expected=='completed':assert '>Abgeschlossen</span>' in view
  db.close()
  # CRUD and annual rollover use synthetic data only.
  status,body,_=get('/?page=person&year=2026')
