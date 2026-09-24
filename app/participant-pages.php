@@ -19,7 +19,7 @@ if($participantAuth){
     }else echo '<p>Noch keine Ausbildungsstände hinterlegt.</p>';
     echo '<section class="card"><h2>Teilnahmen nach Jahr</h2><div class="table-wrap"><table><thead><tr><th>Jahr</th><th>Im Jahr</th><th>Gesamt bis Jahresstand</th></tr></thead><tbody>';
     foreach($overview['years']as$y)echo '<tr><td>'.$y['year'].'</td><td>'.$y['annual'].'</td><td>'.$y['total'].'</td></tr>';
-    echo '</tbody></table></div><p class="muted">Gesamtstände enthalten gegebenenfalls Altbestände und bestätigte Korrekturen. Die Jahres-Gesamtstände werden nicht addiert.</p></section><section class="card"><h2>Wann war ich da?</h2><div class="table-wrap"><table><thead><tr><th>Datum / Jahr</th><th>Einheit</th><th>Ausbildungsinhalt</th></tr></thead><tbody>';
+    echo '</tbody></table></div><p class="muted">Gesamtstände enthalten gegebenenfalls Altbestände und bestätigte Korrekturen. Die Jahres-Gesamtstände werden nicht addiert.</p></section><section class="card"><h2>Wann war ich da?</h2><div class="table-wrap"><table><thead><tr><th>Datum / Jahr</th><th>Ausbildungseinheit(en)</th><th>Ausbildungsinhalt</th></tr></thead><tbody>';
     foreach($overview['attendance']as$l)echo '<tr><td>'.h($l['date']?date('d.m.Y',strtotime($l['date'])):$l['year'].' · Datum nicht hinterlegt').'</td><td>'.(int)$l['unit'].'</td><td>'.h($l['title']).'</td></tr>';
     if(!$overview['attendance'])echo '<tr><td colspan="3">Keine einzelnen Termine hinterlegt.</td></tr>';
     echo '</tbody></table></div></section><p>Bei Fragen oder Korrekturen wende dich bitte an die Ausbildungsleitung.</p>';foot();exit;
