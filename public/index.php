@@ -51,7 +51,7 @@ function day(string $name): ?string {
 function status(array $p): string {
     if(($p['exam_date']||$p['exam_label'])&&(int)$p['total']>=12) return '<span class="badge passed">Abgeschlossen</span>';
     if($p['exam_date']||$p['exam_label']) return '<span class="badge passed">Prüfung bestanden</span>';
-    if((int)$p['total']>=12) return '<span class="badge ready">12 Teilnahmen erreicht</span>';
+    if((int)$p['total']>=12) return '<span class="badge ready">12 Teilnahmen erreicht · prüfungsberechtigt</span>';
     if((int)$p['total']>=10) return '<span class="badge ready">10 Teilnahmen erreicht · prüfungsberechtigt</span>';
     $missing=10-(int)$p['total'];
     return '<span class="badge">Noch '.$missing.' '.($missing===1?'Teilnahme':'Teilnahmen').'</span>';
