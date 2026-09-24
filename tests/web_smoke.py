@@ -19,6 +19,9 @@ try:
   except urllib.error.URLError:time.sleep(.1)
  else:raise RuntimeError('Server did not start')
  assert status==200 and 'Beispiel' not in body
+ if env.get('TRAINING_ENV')=='production':
+  assert 'Testumgebung' not in body and 'VG Selters · DEV' not in body
+  assert 'ausbildung_session=' in headers['Set-Cookie'] and 'ausbildung_dev_session=' not in headers['Set-Cookie']
  for path in ['/?page=person&id=1&year=2026','/?page=export&year=2026','/?page=lesson&id=1','/?page=import']:
   assert 'Beispiel' not in get(path)[1]
  assert 'no-store' in headers['Cache-Control'] and 'frame-ancestors' in headers['Content-Security-Policy']

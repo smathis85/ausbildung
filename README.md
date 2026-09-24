@@ -1,5 +1,13 @@
 # Ausbildungsverwaltung – eigenständiges DEV-Projekt
 
+## Freigegebene Produktionsübernahme
+
+Der Benutzer hat die Produktionsbereitstellung unter `ausbildung.einsatzleiter.app` freigegeben. `deploy/build_package.py ZIEL --production` erstellt ein separates, prüfsummengebundenes Paket ohne Excel- oder Benutzerdaten. Der Produktionsinstaller kopiert beim ersten Lauf mit der SQLite-Backup-API den aktuellen DEV-Datenstand nach `/var/lib/ausbildung/training.sqlite`, einschließlich des bestehenden Passwort-Hashes. Er gibt keine Zugangsdaten aus und kopiert keine Sitzungen. Ein noch nicht aktivierter Zugang erhält einen neuen privaten Einrichtungscode.
+
+Eigene Produktionspfade: `/opt/ausbildung`, `/var/lib/ausbildung`, Systembenutzer und PHP-FPM-Pool `ausbildung`, eigener vhost und tägliche Sicherung um 03:25 Uhr. DEV bleibt eigenständig bestehen; Daten werden nach der einmaligen Übernahme nicht synchronisiert. Bestehende Produktionsdaten werden bei wiederholter Installation niemals erneut aus DEV importiert. Die Produktionsdarstellung wird ausschließlich über `TRAINING_ENV=production` aktiviert und verwendet einen eigenen Cookie-Namen.
+
+Installation als Administrator: `sudo bash /home/einsatzadmin/ausbildung-prod-stage/install.sh`. Vor der Freischaltung prüft der Installer DNS, Zertifikat, SQLite-Integrität, Konfiguration und Dateizugriffsschutz. Externe Backups sind wie bei DEV separat zu berücksichtigen. Zur Stilllegung nur den Produktions-vhost aus sites-enabled nehmen; Daten und DEV unberührt lassen.
+
 Eigenständige PHP-8.3-Anwendung mit SQLite, ohne Laravel-/Einsatzleiter-Abhängigkeit, ohne Zugriff auf Einsatzleiter-Datenbanken. Öffentlich erreichbar ist nur public/. Eigener Betriebssystembenutzer, PHP-FPM-Pool, Datenbank und Sitzungen. Keine externen Frontend-Abhängigkeiten oder Telemetrie.
 
 ## Umfang

@@ -6,6 +6,7 @@ date_default_timezone_set('Europe/Berlin');
 umask(0077);
 $dataDir=getenv('TRAINING_DATA_DIR')?:__DIR__.'/../private';
 $local=getenv('TRAINING_LOCAL_TEST')==='1';
+define('TRAINING_PRODUCTION',getenv('TRAINING_ENV')==='production');
 if(!$local && ($_SERVER['HTTPS']??'')!=='on') { http_response_code(400); exit('HTTPS erforderlich.'); }
 header("Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
 header('X-Content-Type-Options: nosniff'); header('Referrer-Policy: no-referrer'); header('X-Frame-Options: DENY');
@@ -13,7 +14,7 @@ header('Cache-Control: no-store, private'); header('X-Robots-Tag: noindex, nofol
 if(!$local) header('Strict-Transport-Security: max-age=31536000');
 ini_set('session.use_strict_mode','1'); ini_set('session.use_only_cookies','1');
 if(!is_dir($dataDir.'/sessions')) mkdir($dataDir.'/sessions',0700,true);
-session_save_path($dataDir.'/sessions'); session_name('ausbildung_dev_session');
+session_save_path($dataDir.'/sessions'); session_name(TRAINING_PRODUCTION?'ausbildung_session':'ausbildung_dev_session');
 session_set_cookie_params(['lifetime'=>0,'path'=>'/','secure'=>!$local,'httponly'=>true,'samesite'=>'Strict']); session_start();
 $_SESSION['csrf']??=bin2hex(random_bytes(32));
 function h(mixed $v): string { return htmlspecialchars((string)$v,ENT_QUOTES|ENT_SUBSTITUTE,'UTF-8'); }
@@ -45,12 +46,12 @@ function input(string $label,string $name,mixed $value='',string $type='text',st
     return '<label>'.h($label).'<input type="'.h($type).'" name="'.h($name).'" value="'.h($value).'" '.$extra.'></label>';
 }
 function head(string $title,bool $auth=true): void {
-    echo '<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>'.h($title).' · Ausbildung</title><link rel="stylesheet" href="/assets/app.css"><script defer src="/assets/app.js"></script></head><body><header><a class="brand" href="/">Ausbildung <small>VG Selters · DEV</small></a>';
+    echo '<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>'.h($title).' · Ausbildung</title><link rel="stylesheet" href="/assets/app.css"><script defer src="/assets/app.js"></script></head><body><header><a class="brand" href="/">Ausbildung <small>VG Selters'.(TRAINING_PRODUCTION?'':' · DEV').'</small></a>';
     if($auth) echo '<nav aria-label="Hauptnavigation"><a href="/">Übersicht</a><a href="/?page=lessons">Termine</a><a href="/?page=import">Importprüfung</a><a href="/?page=account">Zugang</a><form method="post">'.csrf().'<input type="hidden" name="action" value="logout"><button class="subtle">Abmelden</button></form></nav>';
     echo '</header><main><h1>'.h($title).'</h1>';
     if(isset($_SESSION['flash'])) { echo '<p class="notice" role="status">'.h($_SESSION['flash']).'</p>'; unset($_SESSION['flash']); }
 }
-function foot(): void { echo '</main><footer>Eigenständige Ausbildungsverwaltung · Testumgebung · Nur für deinen Zugang</footer></body></html>'; }
+function foot(): void { echo '</main><footer>Eigenständige Ausbildungsverwaltung'.(TRAINING_PRODUCTION?'':' · Testumgebung').' · Nur für deinen Zugang</footer></body></html>'; }
 try {
     $s=new Store($dataDir.'/training.sqlite');
     $account=$s->one('SELECT * FROM accounts WHERE id=1');

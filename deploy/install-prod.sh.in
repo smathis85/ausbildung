@@ -1,0 +1,99 @@
+#!/usr/bin/env bash
+set -euo pipefail
+umask 077
+[[ $(id -u) == 0 ]] || { echo 'Bitte mit sudo ausführen.'; exit 1; }
+stage=/home/einsatzadmin/ausbildung-prod-stage
+host=ausbildung.einsatzleiter.app
+app=/opt/ausbildung
+data=/var/lib/ausbildung
+pool=/etc/php/8.3/fpm/pool.d/ausbildung.conf
+site=/etc/nginx/sites-available/ausbildung.einsatzleiter.app
+link=/etc/nginx/sites-enabled/ausbildung.einsatzleiter.app
+cron=/etc/cron.d/ausbildung-backup
+exec 9>/run/lock/ausbildung-prod-install.lock
+flock -n 9 || { echo 'Installation läuft bereits.'; exit 1; }
+[[ $(sha256sum "$stage/code.tar" | cut -d' ' -f1) == '@@CODE_SHA@@' ]] || { echo 'Paket-Prüfsumme stimmt nicht.'; exit 1; }
+getent ahostsv4 "$host" | awk '{print $1}' | grep -qx 31.70.130.202 || { echo 'DNS prüfen.'; exit 1; }
+openssl x509 -in /etc/ssl/einsatzleiter/fullchain.pem -noout -checkhost "$host" | grep -q 'does match' || exit 1
+[[ ! -d "$app" || -f "$app/.ausbildung-prod-owned" ]] || { echo 'Fremdes App-Verzeichnis.'; exit 1; }
+[[ ! -d "$data" || -f "$data/.ausbildung-prod-owned" ]] || { echo 'Fremdes Datenverzeichnis.'; exit 1; }
+for file in "$pool" "$site" "$cron"; do
+    [[ ! -e "$file" ]] || grep -q AUSBILDUNG_PROD_V1 "$file" || { echo 'Fremde Konfiguration.'; exit 1; }
+done
+[[ ! -e "$link" || $(readlink "$link") == "$site" ]] || exit 1
+[[ -f "$data/training.sqlite" || -f /var/lib/ausbildung-dev/training.sqlite ]] || { echo 'DEV-Datenbank fehlt.'; exit 1; }
+nginx -t
+php-fpm8.3 -t
+tmp=$(mktemp -d /tmp/ausbildung-prod-install.XXXXXX)
+trap 'rm -rf "$tmp"' EXIT
+tar -tf "$stage/code.tar" | grep -Eq '(^/|(^|/)\.\.(/|$))' && { echo 'Unsichere Paketpfade.'; exit 1; }
+tar --no-same-owner -xf "$stage/code.tar" -C "$tmp"
+if ! id ausbildung >/dev/null 2>&1; then useradd --system --user-group --home-dir "$data" --shell /usr/sbin/nologin ausbildung; fi
+install -d -o root -g root -m 0755 "$app"
+touch "$app/.ausbildung-prod-owned"
+install -d -o ausbildung -g ausbildung -m 0700 "$data" "$data/sessions" "$data/backups" /tmp/ausbildung
+touch "$data/.ausbildung-prod-owned"
+if [[ -f "$data/training.sqlite" && -f "$app/bin/backup.php" ]]; then
+    runuser -u ausbildung -- env TRAINING_DATA_DIR="$data" php "$app/bin/backup.php"
+fi
+cp -a "$tmp"/. "$app"/
+chown -R root:root "$app"
+find "$app" -type d -exec chmod 0755 {} +
+find "$app" -type f -exec chmod 0644 {} +
+if [[ ! -f "$data/training.sqlite" ]]; then
+    # SQLite backup API creates one consistent snapshot, including password hash.
+    # Never copy sessions or read/display credentials. Never overwrite existing PROD data.
+    python3 - <<'PY'
+import sqlite3, pathlib, os, pwd
+src=sqlite3.connect('file:/var/lib/ausbildung-dev/training.sqlite?mode=ro',uri=True)
+path=pathlib.Path('/var/lib/ausbildung/training.sqlite.importing')
+if path.exists(): path.unlink()
+dst=sqlite3.connect(path)
+src.backup(dst)
+assert dst.execute('PRAGMA integrity_check').fetchone()[0]=='ok'
+assert not dst.execute('PRAGMA foreign_key_check').fetchall()
+assert dst.execute('SELECT email FROM accounts WHERE id=1').fetchone()==('sascha.mathis@ffvgs.de',)
+print('Übernommene Personen:',dst.execute('SELECT count(*) FROM participants').fetchone()[0])
+print('Übernommene Teilnahmen:',dst.execute('SELECT count(*) FROM attendance').fetchone()[0])
+dst.close();src.close()
+owner=pwd.getpwnam('ausbildung');os.chown(path,owner.pw_uid,owner.pw_gid);os.chmod(path,0o600)
+path.rename('/var/lib/ausbildung/training.sqlite')
+PY
+fi
+runuser -u ausbildung -- env TRAINING_DATA_DIR="$data" TRAINING_ENV=production php "$app/bin/promote.php"
+runuser -u ausbildung -- env TRAINING_DATA_DIR="$data" php "$app/bin/backup.php"
+for file in "$pool" "$site"; do
+    [[ ! -f "$file" ]] || cp -a "$file" "$tmp/$(basename "$file").before"
+done
+install -o root -g root -m 0644 "$app/deploy/fpm-prod.conf" "$pool"
+install -o root -g root -m 0644 "$app/deploy/nginx-prod.conf" "$site"
+ln -sfn "$site" "$link"
+if ! php-fpm8.3 -t || ! nginx -t; then
+    for file in "$pool" "$site"; do
+        if [[ -f "$tmp/$(basename "$file").before" ]]; then cp -a "$tmp/$(basename "$file").before" "$file"; else rm -f "$file"; fi
+    done
+    [[ -f "$site" ]] || rm -f "$link"
+    echo 'Konfiguration zurückgenommen; kein Reload.'; exit 1
+fi
+cat > "$cron" <<'CRON'
+# AUSBILDUNG_PROD_V1
+SHELL=/bin/sh
+PATH=/usr/bin:/bin
+25 3 * * * ausbildung env TRAINING_DATA_DIR=/var/lib/ausbildung /usr/bin/php /opt/ausbildung/bin/backup.php >> /var/lib/ausbildung/backup.log 2>&1
+CRON
+chmod 0644 "$cron"
+systemctl reload php8.3-fpm
+systemctl reload nginx
+curl --fail --silent --show-error --resolve "$host:443:127.0.0.1" "https://$host/" -o "$tmp/check.html"
+grep -q Ausbildungsverwaltung "$tmp/check.html"
+if grep -q 'Testumgebung' "$tmp/check.html"; then echo 'Falsche Laufzeitumgebung.'; exit 1; fi
+for path in /private/training.sqlite /bin/manage.php /app/Store.php /source-import.json /.git/config; do
+    code=$(curl --silent --show-error --resolve "$host:443:127.0.0.1" -o /dev/null -w '%{http_code}' "https://$host$path")
+    [[ "$code" == 404 ]] || { echo "Dateischutzprüfung fehlgeschlagen: $path"; exit 1; }
+done
+echo "Produktive Ausbildungsverwaltung bereit: https://$host"
+echo 'Anmeldung mit deinem bereits auf Ausbildungs-DEV eingerichteten Passwort. DEV bleibt getrennt erhalten.'
+if [[ -f "$data/setup-code.txt" ]]; then
+    echo 'Zugang war auf DEV noch nicht eingerichtet. Ersteinrichtung unter /?page=setup erforderlich.'
+    echo 'Einmalcode nur am eigenen Terminal anzeigen: sudo cat /var/lib/ausbildung/setup-code.txt'
+fi
