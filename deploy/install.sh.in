@@ -1,0 +1,79 @@
+#!/usr/bin/env bash
+set -euo pipefail
+umask 077
+[[ $(id -u) == 0 ]] || { echo 'Bitte mit sudo ausführen.'; exit 1; }
+stage=/home/einsatzadmin/ausbildung-dev-stage
+host=ausbildung-dev.einsatzleiter.app
+app=/opt/ausbildung-dev
+data=/var/lib/ausbildung-dev
+pool=/etc/php/8.3/fpm/pool.d/ausbildung-dev.conf
+site=/etc/nginx/sites-available/ausbildung-dev.einsatzleiter.app
+link=/etc/nginx/sites-enabled/ausbildung-dev.einsatzleiter.app
+cron=/etc/cron.d/ausbildung-dev-backup
+[[ -f "$stage/code.tar" && -f "$stage/source-import.json" ]] || { echo 'Installationspaket fehlt.'; exit 1; }
+[[ $(sha256sum "$stage/code.tar" | cut -d' ' -f1) == '@@CODE_SHA@@' ]] || { echo 'Code-Prüfsumme stimmt nicht.'; exit 1; }
+[[ $(sha256sum "$stage/source-import.json" | cut -d' ' -f1) == '@@IMPORT_SHA@@' ]] || { echo 'Import-Prüfsumme stimmt nicht.'; exit 1; }
+getent ahostsv4 "$host" | awk '{print $1}' | grep -qx 31.70.130.202 || { echo 'DNS-A-Eintrag fehlt oder zeigt nicht auf diesen Server.'; exit 1; }
+openssl x509 -in /etc/ssl/einsatzleiter/fullchain.pem -noout -checkhost "$host" | grep -q 'does match' || { echo 'Passendes Zertifikat fehlt.'; exit 1; }
+[[ ! -d "$app" || -f "$app/.ausbildung-dev-owned" ]] || { echo 'Fremdes Zielverzeichnis: Abbruch.'; exit 1; }
+[[ ! -d "$data" || -f "$data/.ausbildung-dev-owned" ]] || { echo 'Fremdes Datenverzeichnis: Abbruch.'; exit 1; }
+for file in "$pool" "$site" "$cron"; do
+    [[ ! -e "$file" ]] || grep -q AUSBILDUNG_DEV_V1 "$file" || { echo 'Fremde Konfigurationsdatei: Abbruch.'; exit 1; }
+done
+[[ ! -e "$link" || $(readlink "$link") == "$site" ]] || { echo 'Fremder Webserver-Link: Abbruch.'; exit 1; }
+nginx -t
+php-fpm8.3 -t
+tmp=$(mktemp -d /tmp/ausbildung-install.XXXXXX)
+trap 'rm -rf "$tmp"' EXIT
+tar -tf "$stage/code.tar" | grep -Eq '(^/|(^|/)\.\.(/|$))' && { echo 'Unsichere Paketpfade.'; exit 1; }
+tar --no-same-owner -xf "$stage/code.tar" -C "$tmp"
+if ! id ausbildung-dev >/dev/null 2>&1; then useradd --system --user-group --home-dir "$data" --shell /usr/sbin/nologin ausbildung-dev; fi
+install -d -o root -g root -m 0755 "$app"
+touch "$app/.ausbildung-dev-owned"
+install -d -o ausbildung-dev -g ausbildung-dev -m 0700 "$data" "$data/sessions" "$data/backups" /tmp/ausbildung-dev
+touch "$data/.ausbildung-dev-owned"
+if [[ -f "$data/training.sqlite" && -f "$app/bin/backup.php" ]]; then
+    runuser -u ausbildung-dev -- env TRAINING_DATA_DIR="$data" php "$app/bin/backup.php"
+fi
+cp -a "$tmp"/. "$app"/
+chown -R root:root "$app"
+find "$app" -type d -exec chmod 0755 {} +
+find "$app" -type f -exec chmod 0644 {} +
+install -o ausbildung-dev -g ausbildung-dev -m 0600 "$stage/source-import.json" "$data/source-import.json"
+runuser -u ausbildung-dev -- env TRAINING_DATA_DIR="$data" php "$app/bin/manage.php" init
+runuser -u ausbildung-dev -- env TRAINING_DATA_DIR="$data" php "$app/bin/manage.php" import "$data/source-import.json"
+runuser -u ausbildung-dev -- env TRAINING_DATA_DIR="$data" php "$app/bin/backup.php"
+# Only these application's own configuration files may be replaced.
+for file in "$pool" "$site" "$cron"; do
+    if [[ -f "$file" ]]; then cp -a "$file" "$tmp/$(basename "$file").before"; fi
+done
+install -o root -g root -m 0644 "$app/deploy/fpm.conf" "$pool"
+install -o root -g root -m 0644 "$app/deploy/nginx.conf" "$site"
+ln -sfn "$site" "$link"
+if ! php-fpm8.3 -t || ! nginx -t; then
+    for file in "$pool" "$site"; do
+        if [[ -f "$tmp/$(basename "$file").before" ]]; then cp -a "$tmp/$(basename "$file").before" "$file"; else rm -f "$file"; fi
+    done
+    [[ -f "$site" ]] || rm -f "$link"
+    echo 'Konfigurationsprüfung fehlgeschlagen; keine Dienste neu geladen.'; exit 1
+fi
+cat > "$cron" <<'CRON'
+# AUSBILDUNG_DEV_V1
+SHELL=/bin/sh
+PATH=/usr/bin:/bin
+15 3 * * * ausbildung-dev env TRAINING_DATA_DIR=/var/lib/ausbildung-dev /usr/bin/php /opt/ausbildung-dev/bin/backup.php >> /var/lib/ausbildung-dev/backup.log 2>&1
+CRON
+chmod 0644 "$cron"
+systemctl reload php8.3-fpm
+systemctl reload nginx
+curl --fail --silent --show-error --resolve "$host:443:127.0.0.1" "https://$host/" -o "$tmp/check.html"
+grep -q Ausbildungsverwaltung "$tmp/check.html"
+for path in /private/training.sqlite /bin/manage.php /app/Store.php /source-import.json; do
+    code=$(curl --silent --show-error --resolve "$host:443:127.0.0.1" -o /dev/null -w '%{http_code}' "https://$host$path")
+    [[ "$code" == 404 ]] || { echo "Dateischutzprüfung fehlgeschlagen: $path"; exit 1; }
+done
+echo 'Getrennte Ausbildungsverwaltung auf DEV eingerichtet. Einsatzleiter-Dateien und Datenbanken wurden nicht verändert.'
+echo "Adresse: https://$host"
+echo "Einrichtung: https://$host/?page=setup"
+echo 'Einmalcode am eigenen Terminal anzeigen: sudo cat /var/lib/ausbildung-dev/setup-code.txt'
+echo 'Den Code auf der geschützten Einrichtungsseite eingeben, nicht im Chat senden.'
