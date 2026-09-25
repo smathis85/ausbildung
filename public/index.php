@@ -15,15 +15,32 @@ header("Content-Security-Policy: default-src 'self'; script-src 'self'; style-sr
 header('X-Content-Type-Options: nosniff'); header('Referrer-Policy: no-referrer'); header('X-Frame-Options: DENY');
 header('Cache-Control: no-store, private'); header('X-Robots-Tag: noindex, nofollow');
 if(!$local) header('Strict-Transport-Security: max-age=31536000');
-// Serve this fixed public asset through the existing application route.
-// No user-controlled file path; no session or database needed for the logo.
-if (($_GET['asset'] ?? null) === 'brand-logo') {
-    $logo = __DIR__.'/assets/vg-selters-logo.png';
-    header('Content-Type: image/png');
-    header('Cache-Control: public, max-age=86400');
-    header('Content-Length: '.filesize($logo));
-    readfile($logo);
-    exit;
+// Only explicitly listed public branding assets are served without a session.
+$asset=$_GET['asset']??null;
+if($asset==='app-manifest-v1'){
+    header('Content-Type: application/manifest+json; charset=UTF-8');
+    header('Cache-Control: public, max-age=3600');
+    echo json_encode([
+        'id'=>'/','name'=>'Ausbildung VG Selters'.(TRAINING_PRODUCTION?'':' · DEV'),
+        'short_name'=>'Ausbildung'.(TRAINING_PRODUCTION?'':' DEV'),
+        'lang'=>'de','start_url'=>'/','scope'=>'/','display'=>'standalone',
+        'background_color'=>'#ffffff','theme_color'=>'#142d36',
+        'icons'=>[
+            ['src'=>'/?asset=app-icon-192-v1','sizes'=>'192x192','type'=>'image/png','purpose'=>'any'],
+            ['src'=>'/?asset=app-icon-512-v1','sizes'=>'512x512','type'=>'image/png','purpose'=>'any'],
+        ],
+    ],JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE);exit;
+}
+$publicAssets=[
+    'brand-logo'=>'vg-selters-logo.png',
+    'app-icon-180-v1'=>'training-icon-180.png',
+    'app-icon-192-v1'=>'training-icon-192.png',
+    'app-icon-512-v1'=>'training-icon-512.png',
+];
+if(is_string($asset)&&isset($publicAssets[$asset])){
+    $file=__DIR__.'/assets/'.$publicAssets[$asset];
+    header('Content-Type: image/png');header('Cache-Control: public, max-age=86400');
+    header('Content-Length: '.filesize($file));readfile($file);exit;
 }
 ini_set('session.use_strict_mode','1'); ini_set('session.use_only_cookies','1');
 if(!is_dir($dataDir.'/sessions')) mkdir($dataDir.'/sessions',0700,true);
@@ -61,7 +78,7 @@ function input(string $label,string $name,mixed $value='',string $type='text',st
     return '<label>'.h($label).'<input type="'.h($type).'" name="'.h($name).'" value="'.h($value).'" '.$extra.'></label>';
 }
 function head(string $title,bool $auth=true): void {
-    echo '<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>'.h($title).' · Ausbildung</title><link rel="stylesheet" href="/assets/app.css?v=print1"><script defer src="/assets/app.js?v=archive1"></script></head><body><header><a class="brand" href="/"><img class="brand-logo" src="/?asset=brand-logo" width="44" height="51" alt="Wappen der Verbandsgemeinde Selters"><span>Ausbildung <small>VG Selters'.(TRAINING_PRODUCTION?'':' · DEV').'</small></span></a>';
+    echo '<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>'.h($title).' · Ausbildung</title><link rel="manifest" href="/?asset=app-manifest-v1"><link rel="apple-touch-icon" sizes="180x180" href="/?asset=app-icon-180-v1"><link rel="icon" type="image/png" sizes="192x192" href="/?asset=app-icon-192-v1"><meta name="apple-mobile-web-app-title" content="Ausbildung"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="theme-color" content="#142d36"><link rel="stylesheet" href="/assets/app.css?v=print1"><script defer src="/assets/app.js?v=archive1"></script></head><body><header><a class="brand" href="/"><img class="brand-logo" src="/?asset=brand-logo" width="44" height="51" alt="Wappen der Verbandsgemeinde Selters"><span>Ausbildung <small>VG Selters'.(TRAINING_PRODUCTION?'':' · DEV').'</small></span></a>';
     if($auth) echo '<nav aria-label="Hauptnavigation"><a href="/">Übersicht</a><a href="/?page=lessons">Termine</a><a href="/?page=import">Importprüfung</a><a href="/?page=account">Zugang</a><form method="post">'.csrf().'<input type="hidden" name="action" value="logout"><button class="subtle">Abmelden</button></form></nav>';
     echo '</header><main><h1>'.h($title).'</h1>';
     if(isset($_SESSION['flash'])) { echo '<p class="notice" role="status">'.h($_SESSION['flash']).'</p>'; unset($_SESSION['flash']); }
