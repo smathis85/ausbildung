@@ -18,3 +18,9 @@ Production corrected 2 existing department values and found 0 potential duplicat
 The training production page returned HTTP 200.
 
 The follow-up implementation has passed synthetic CSV, attendance and archive tests.
+
+After explicit user approval for direct production correction, the follow-up
+release normalized 14 further participant department values. Together with the
+previous 2 Freilingen corrections, all 16 rows in the supplied import are covered.
+The maintenance reported 0 potential duplicate people, and production returned
+HTTP 200. A database backup preceded the update.
