@@ -178,7 +178,7 @@ if($_SERVER['REQUEST_METHOD']==='POST') {
         }
         if($action==='person') {
             $id=number('id',0,PHP_INT_MAX); $year=number('year',2010,2100);
-            $first=field('first_name','',100);$last=field('last_name','',100);$dept=field('department','',120);
+            $first=field('first_name','',100);$last=field('last_name','',100);$dept=Ausbildung\ParticipantCsv::department(field('department','',120));
             if(!$first||!$last||!$dept) throw new RuntimeException('Vorname, Nachname und Feuerwehr sind erforderlich.');
             $start=day('start_date');$course=field('course','',100);$exam=day('exam_date');$comment=field('comment','',3000);$reported=field('reported_confirmed','',1)==='1'?1:0;
             $adjustment=number('adjustment',-10000,10000);$reason=field('adjustment_reason','',500);

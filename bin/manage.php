@@ -7,6 +7,7 @@ $dir=getenv('TRAINING_DATA_DIR')?:__DIR__.'/../private';
 if(!is_dir($dir)) mkdir($dir,0700,true);
 $store=new Ausbildung\Store($dir.'/training.sqlite');
 $store->schema();
+if($store->normalizedDepartments||$store->duplicateNamesAfterNormalization)echo 'Feuerwehr-Schreibweisen korrigiert: '.$store->normalizedDepartments.'. Mögliche doppelte Personen: '.$store->duplicateNamesAfterNormalization.".\n";
 $command=$argv[1]??'help';
 if($command==='init') {
     if(!$store->one('SELECT id FROM accounts WHERE id=1')) {

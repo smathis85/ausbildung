@@ -5,7 +5,13 @@ use RuntimeException;
 final class ParticipantCsv
 {
     public function __construct(private Store $store) {}
+    public static function department(string $value): string {
+        $value=trim(preg_replace('/\s+/u',' ',$value));
+        return in_array(mb_strtolower($value),['freiligen','ff freiligen','freilingen','ff freilingen'],true)
+            ? 'Freilingen' : $value;
+    }
     private static function key(array $r): string {
+        $r['department']=self::department($r['department']);
         return implode("\x1f",array_map(fn($v)=>mb_strtolower(\Normalizer::normalize(preg_replace('/\s+/u',' ',trim($v)),\Normalizer::FORM_C)),[$r['first_name'],$r['last_name'],$r['department']]));
     }
     public static function parse(string $csv): array {
@@ -28,6 +34,7 @@ final class ParticipantCsv
                 if(count($rows)>=1000)throw new RuntimeException('Maximal 1.000 Teilnehmer pro Datei.');
                 if(count($values)!==count($mapped))throw new RuntimeException("Zeile $line: Anzahl der Spalten stimmt nicht.");
                 $row=array_merge(['start_date'=>'','course'=>''],array_combine($mapped,array_map('trim',$values)));
+                $row['department']=self::department($row['department']);
                 foreach(['first_name'=>100,'last_name'=>100,'department'=>120,'course'=>100] as $key=>$limit){
                     if(mb_strlen($row[$key])>$limit||($key!=='course'&&$row[$key]==='')||preg_match('/[\x00-\x1f\x7f]/u',$row[$key]))throw new RuntimeException("Zeile $line: Name, Feuerwehr oder Lehrgang ist ungültig.");
                 }
