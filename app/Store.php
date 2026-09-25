@@ -34,6 +34,11 @@ SQL);
                 $this->audit('reported_checkbox_migrated');
                 $this->archiveCompletedParticipants();
             }
+            // Older CSV imports parsed a two-digit year such as 28.08.26 as 0026-08-28.
+            // Restrict correction to CSV-created enrollments (no Excel source label).
+            $fixed=$this->run("UPDATE enrollments SET start_date='20'||substr(start_date,3),version=version+1
+                WHERE start_label='' AND start_date GLOB '00[0-9][0-9]-[0-1][0-9]-[0-3][0-9]'");
+            if($fixed)$this->audit('csv_start_dates_corrected','enrollment',null,['count'=>$fixed]);
         });
     }
     public static function legacyReportedConfirmed(string $value): bool {

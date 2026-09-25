@@ -32,7 +32,17 @@ final class ParticipantCsv
                     if(mb_strlen($row[$key])>$limit||($key!=='course'&&$row[$key]==='')||preg_match('/[\x00-\x1f\x7f]/u',$row[$key]))throw new RuntimeException("Zeile $line: Name, Feuerwehr oder Lehrgang ist ungültig.");
                 }
                 if($row['start_date']!==''){
-                    $date=false;foreach(['!Y-m-d','!d.m.Y'] as $format){$d=\DateTimeImmutable::createFromFormat($format,$row['start_date']);$errors=\DateTimeImmutable::getLastErrors();if($d&&($errors===false||(!$errors['warning_count']&&!$errors['error_count']))){$date=$d;break;}}
+                    $raw=$row['start_date'];
+                    if(preg_match('/^(\d{1,2})\.(\d{1,2})\.(\d{2})$/D',$raw,$parts)){
+                        $raw=sprintf('%02d.%02d.20%02d',(int)$parts[1],(int)$parts[2],(int)$parts[3]);
+                    }
+                    $date=false;
+                    foreach(['!Y-m-d'=>'/^\d{4}-\d{2}-\d{2}$/D','!d.m.Y'=>'/^\d{1,2}\.\d{1,2}\.\d{4}$/D'] as $format=>$pattern){
+                        if(!preg_match($pattern,$raw))continue;
+                        $d=\DateTimeImmutable::createFromFormat($format,$raw);
+                        $errors=\DateTimeImmutable::getLastErrors();
+                        if($d&&($errors===false||(!$errors['warning_count']&&!$errors['error_count']))&&((int)$d->format('Y'))>=2000){$date=$d;break;}
+                    }
                     if(!$date)throw new RuntimeException("Zeile $line: Ausbildungsbeginn bitte als TT.MM.JJJJ oder JJJJ-MM-TT angeben.");
                     $row['start_date']=$date->format('Y-m-d');
                 }

@@ -13,7 +13,10 @@ check($import->apply($rows,2026)===['added'=>2,'skipped'=>1],'Apply counts');
 check($import->apply($rows,2026)===['added'=>0,'skipped'=>3],'Repeated import idempotent');
 check($s->total(1,2026)===0,'No invented attendance');
 check(count(ParticipantCsv::parse("Feuerwehr,Nachname,Vorname\nTestwehr,Beispiel,Kim\n"))===1,'Comma and alternate column order');
-foreach(["Vorname;Nachname\nA;B", "Vorname;Nachname;Feuerwehr\nA;;C", "Vorname;Nachname;Feuerwehr;Ausbildungsbeginn\nA;B;C;31.02.2026", "Vorname;Vorname;Feuerwehr\nA;B;C", "Vorname;Nachname;Feuerwehr;Unbekannt\nA;B;C;x", "Vorname;Nachname;Feuerwehr\n", str_repeat('x',524289)] as $bad){
+check(ParticipantCsv::parse("Vorname;Nachname;Feuerwehr;Ausbildungsbeginn\nKim;Kurz;Testwehr;28.08.26\n")[0]['start_date']==='2026-08-28','Two-digit year maps to 2026');
+check(ParticipantCsv::parse("Vorname;Nachname;Feuerwehr;Ausbildungsbeginn\nKim;Lang;Testwehr;28.08.2026\n")[0]['start_date']==='2026-08-28','Four-digit year remains valid');
+check(ParticipantCsv::parse("Vorname;Nachname;Feuerwehr;Ausbildungsbeginn\nKim;Iso;Testwehr;2026-08-28\n")[0]['start_date']==='2026-08-28','ISO date remains valid');
+foreach(["Vorname;Nachname\nA;B", "Vorname;Nachname;Feuerwehr\nA;;C", "Vorname;Nachname;Feuerwehr;Ausbildungsbeginn\nA;B;C;31.02.2026", "Vorname;Nachname;Feuerwehr;Ausbildungsbeginn\nA;B;C;31.02.26", "Vorname;Nachname;Feuerwehr;Ausbildungsbeginn\nA;B;C;0026-08-28", "Vorname;Vorname;Feuerwehr\nA;B;C", "Vorname;Nachname;Feuerwehr;Unbekannt\nA;B;C;x", "Vorname;Nachname;Feuerwehr\n", str_repeat('x',524289)] as $bad){
  try{ParticipantCsv::parse($bad);throw new LogicException('Invalid CSV accepted');}catch(RuntimeException $e){}
 }
 // A database failure rolls back the entire file.
@@ -21,4 +24,9 @@ $more=ParticipantCsv::parse("Vorname;Nachname;Feuerwehr\nFirst;Valid;Testwehr\nS
 $s->db->exec("CREATE TRIGGER reject_test BEFORE INSERT ON participants WHEN NEW.last_name='Reject' BEGIN SELECT RAISE(ABORT,'test rollback'); END");
 try{$import->apply($more,2026);throw new LogicException('Failure expected');}catch(PDOException $e){}
 check((int)$s->one('SELECT COUNT(*) n FROM participants')['n']===2,'Whole-file rollback');
+$s->run("UPDATE enrollments SET start_date='0026-08-28' WHERE participant_id=1");
+$s->schema();
+check($s->one('SELECT start_date FROM enrollments WHERE participant_id=1')['start_date']==='2026-08-28','Already imported CSV date corrected');
+$s->schema();
+check((int)$s->one("SELECT COUNT(*) n FROM audit WHERE event='csv_start_dates_corrected'")['n']===1,'Correction is idempotent');
 echo "PASS: CSV parser, validation, duplicate handling, preview, repeated import and rollback\n";
