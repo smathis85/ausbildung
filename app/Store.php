@@ -9,6 +9,16 @@ final class Store
     public PDO $db;
     public int $normalizedDepartments=0;
     public int $duplicateNamesAfterNormalization=0;
+    public static function canonicalDepartment(string $value): string {
+        $value=trim(preg_replace('/\s+/u',' ',$value));
+        $known=['Freilingen','Freirachdorf','Goddert','Hartenfels','Herschbach',
+            'Krümmel-Sessenhausen','Marienrachdorf','Maroth','Maxsain','Nordhofen',
+            'Quirnbach','Rückeroth','Schenkelberg','Selters','Weidenhahn','Wölferlingen'];
+        $withoutPrefix=preg_replace('/^ff\s+/iu','',$value);
+        if(mb_strtolower($withoutPrefix)==='freiligen')return 'Freilingen';
+        foreach($known as $name)if(mb_strtolower($withoutPrefix)===mb_strtolower($name))return $name;
+        return $value;
+    }
     public function __construct(string $path) {
         $this->db = new PDO('sqlite:'.$path, null, null, [PDO::ATTR_ERRMODE=>PDO::ERRMODE_EXCEPTION, PDO::ATTR_DEFAULT_FETCH_MODE=>PDO::FETCH_ASSOC]);
         $this->db->exec('PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000;');
@@ -41,13 +51,16 @@ SQL);
             $fixed=$this->run("UPDATE enrollments SET start_date='20'||substr(start_date,3),version=version+1
                 WHERE start_label='' AND start_date GLOB '00[0-9][0-9]-[0-1][0-9]-[0-3][0-9]'");
             if($fixed)$this->audit('csv_start_dates_corrected','enrollment',null,['count'=>$fixed]);
-            $departments=$this->run("UPDATE participants SET department='Freilingen',version=version+1
-                WHERE lower(trim(department)) IN ('freiligen','ff freiligen','ff freilingen')");
+            $departments=0;
+            foreach($this->rows('SELECT id,department FROM participants') as $person){
+                $canonical=self::canonicalDepartment($person['department']);
+                if($canonical!==$person['department'])$departments+=$this->run('UPDATE participants SET department=?,version=version+1 WHERE id=?',[$canonical,$person['id']]);
+            }
             $this->normalizedDepartments=$departments;
-            if($departments)$this->audit('freilingen_department_normalized','participant',null,['count'=>$departments]);
+            if($departments)$this->audit('firefighter_names_normalized','participant',null,['count'=>$departments]);
             $this->duplicateNamesAfterNormalization=(int)$this->one("SELECT COUNT(*) n FROM participants p JOIN participants q
                 ON p.id<q.id AND lower(p.first_name)=lower(q.first_name) AND lower(p.last_name)=lower(q.last_name)
-                WHERE p.department='Freilingen' AND q.department='Freilingen'")['n'];
+                WHERE p.department=q.department")['n'];
         });
     }
     public static function legacyReportedConfirmed(string $value): bool {

@@ -6,9 +6,7 @@ final class ParticipantCsv
 {
     public function __construct(private Store $store) {}
     public static function department(string $value): string {
-        $value=trim(preg_replace('/\s+/u',' ',$value));
-        return in_array(mb_strtolower($value),['freiligen','ff freiligen','freilingen','ff freilingen'],true)
-            ? 'Freilingen' : $value;
+        return Store::canonicalDepartment($value);
     }
     private static function key(array $r): string {
         $r['department']=self::department($r['department']);

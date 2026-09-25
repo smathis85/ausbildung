@@ -15,6 +15,9 @@ check($s->total(1,2026)===0,'No invented attendance');
 check(count(ParticipantCsv::parse("Feuerwehr,Nachname,Vorname\nTestwehr,Beispiel,Kim\n"))===1,'Comma and alternate column order');
 check(ParticipantCsv::department(' FF  Freiligen ')==='Freilingen','Known variant normalized');
 check(ParticipantCsv::parse("Vorname;Nachname;Feuerwehr\nKim;Beispiel;FF Freiligen\n")[0]['department']==='Freilingen','CSV variant normalized');
+foreach(['Freilingen','Goddert','Hartenfels','Maroth','Maxsain','Nordhofen','Quirnbach','Rückeroth','Schenkelberg','Selters','Weidenhahn'] as $name)
+    check(ParticipantCsv::department('FF '.$name)===$name,'Imported firefighter prefix normalized: '.$name);
+check(ParticipantCsv::department('FF Unbekannt')==='FF Unbekannt','Unknown firefighter name left intact');
 check(ParticipantCsv::parse("Vorname;Nachname;Feuerwehr;Ausbildungsbeginn\nKim;Kurz;Testwehr;28.08.26\n")[0]['start_date']==='2026-08-28','Two-digit year maps to 2026');
 check(ParticipantCsv::parse("Vorname;Nachname;Feuerwehr;Ausbildungsbeginn\nKim;Lang;Testwehr;28.08.2026\n")[0]['start_date']==='2026-08-28','Four-digit year remains valid');
 check(ParticipantCsv::parse("Vorname;Nachname;Feuerwehr;Ausbildungsbeginn\nKim;Iso;Testwehr;2026-08-28\n")[0]['start_date']==='2026-08-28','ISO date remains valid');
@@ -32,9 +35,11 @@ check($s->one('SELECT start_date FROM enrollments WHERE participant_id=1')['star
 $s->schema();
 check((int)$s->one("SELECT COUNT(*) n FROM audit WHERE event='csv_start_dates_corrected'")['n']===1,'Correction is idempotent');
 $s->run("UPDATE participants SET department='FF Freiligen' WHERE id=1");
+$s->run("UPDATE participants SET department='FF Weidenhahn' WHERE id=2");
 $s->schema();
 check($s->one('SELECT department FROM participants WHERE id=1')['department']==='Freilingen','Existing firefighter variant corrected');
+check($s->one('SELECT department FROM participants WHERE id=2')['department']==='Weidenhahn','Other existing imported firefighter corrected');
 check($s->total(1,2026)===0,'Normalization retains history');
 $s->schema();
-check((int)$s->one("SELECT COUNT(*) n FROM audit WHERE event='freilingen_department_normalized'")['n']===1,'Firefighter normalization idempotent');
+check((int)$s->one("SELECT COUNT(*) n FROM audit WHERE event='firefighter_names_normalized'")['n']===1,'Firefighter normalization idempotent');
 echo "PASS: CSV parser, validation, duplicate handling, preview, repeated import and rollback\n";
