@@ -11,4 +11,4 @@ full crest, white square background, centered, no text, shadow or new elements.
 That preview was rejected because it altered fine crest details. The shipped icon
 uses the original repo PNG unchanged in a white browser-rendered layout instead.
 Assets: public/assets/training-icon-{180,192,512,1024}.png.
-Prepared for DEV only; production approval remains outstanding.
+Deployed to training DEV and, after explicit approval, training production. Manifest name, image dimensions and public icon routes verified. No main Einsatzleiter.app files changed.
