@@ -10,5 +10,6 @@ Maintenance prints the number of changed department values and potential people
 with identical names after normalization. It never merges or deletes people.
 The normalization is idempotent and limited to these four variants.
 
-DEV validated with synthetic fixtures. Production deployment awaits user response
-on the preferred canonical spelling; the current candidate is the workbook spelling.
+The user confirmed `Freilingen`. DEV and production were deployed after backups.
+Production corrected 2 existing department values and found 0 potential duplicate people.
+The training production page returned HTTP 200.
