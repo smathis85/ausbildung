@@ -14,6 +14,6 @@ Prüfung oder Vortrag. Die Vorschau allein schreibt keine Daten.
 
 Bestätigung prüft Dubletten erneut innerhalb einer SQLite-Schreibtransaktion.
 Fehler führen zum vollständigen Rollback. Audit enthält Jahr und Anzahlen, keine CSV-Inhalte.
-Keine Migration erforderlich. Nur DEV freigegeben und bereitgestellt.
+Keine Migration erforderlich. Nach ausdrücklicher Freigabe auf DEV und Produktion bereitgestellt. Produktionsdateien mit DEV verglichen, Datenbank vorher gesichert und Anmeldeschutz der CSV-Routen geprüft. Es wurden keine Teilnehmer beim Deployment importiert.
 
 Tests: participant_csv.php, csv_http.py, participant_http.py, web_smoke.py.
