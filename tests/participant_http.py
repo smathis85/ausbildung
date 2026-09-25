@@ -31,7 +31,7 @@ try:
  status,body=login(participant,'incorrect');assert 'Anmeldung nicht möglich' in body and 'Beispiel' not in body
  status,body=login(participant,'Common-test-2026');assert status==200 and 'Alex Beispiel' in body and '11 / 10' in body and '10 Teilnahmen erreicht' in body
  assert 'INTERNAL-ADMIN' not in body and 'CSV exportieren' not in body and 'name="action" value="person"' not in body
- for path in ['/?page=person&id=1&year=2026','/?page=person&id=2&year=2026','/?page=account','/?page=export&year=2026','/?page=import','/?page=lesson&id=1','/?page=lessons']:
+ for path in ['/?page=csv-import','/?page=csv-template','/?page=person&id=1&year=2026','/?page=person&id=2&year=2026','/?page=account','/?page=export&year=2026','/?page=import','/?page=lesson&id=1','/?page=lessons']:
   status,body=req(participant,path);assert status==403,(path,status);assert 'INTERNAL-ADMIN' not in body
  _,body=req(participant,'/?page=me&id=2');assert 'Alex Beispiel' in body
  status,body=req(participant,'/?page=me',{'csrf':token(body),'action':'attendance','id':1,'version':1,'present[]':[1]});assert status==403

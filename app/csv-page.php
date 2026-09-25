@@ -1,0 +1,12 @@
+<?php
+declare(strict_types=1);
+// Administrator-only view, rendered through the authenticated main router.
+echo '<section class="card"><h2>Teilnehmer aus einer CSV-Datei importieren</h2><p>Pflichtspalten: <strong>Vorname, Nachname, Feuerwehr</strong>. Optional: Ausbildungsbeginn und Lehrgang. Verwende CSV UTF-8 mit Semikolon oder Komma.</p><p><a href="/?page=csv-template">CSV-Vorlage herunterladen</a></p><p>Es werden neue Teilnehmer mit null Teilnahmen angelegt. Bereits vorhandene Personen mit gleichem Namen und gleicher Feuerwehr sowie doppelte Zeilen werden übersprungen. Bestehende Daten, Teilnahmen und Prüfungsvermerke bleiben erhalten.</p><form method="post" enctype="multipart/form-data">'.csrf().'<input type="hidden" name="action" value="csv_preview">'.input('Ausbildungsjahr','year',$year,'number','required min="2010" max="2100"').'<label>CSV-Datei (maximal 512 KB / 1.000 Teilnehmer)<input type="file" name="csv_file" accept=".csv,text/csv" required></label><button>Datei prüfen und Vorschau anzeigen</button></form></section>';
+$draft=$_SESSION['csv_import']??null;
+if($draft&&$draft['expires']<time()){unset($_SESSION['csv_import']);$draft=null;echo '<p class="notice">Die Vorschau ist abgelaufen. Bitte die Datei erneut auswählen.</p>';}
+if($draft){
+    $rows=(new Ausbildung\ParticipantCsv($s))->preview($draft['rows']);$new=count(array_filter($rows,fn($r)=>!$r['duplicate']));
+    echo '<section class="card"><h2>Vorschau · Ausbildungsjahr '.(int)$draft['year'].'</h2><p>'.$new.' neue Teilnehmer · '.(count($rows)-$new).' Einträge werden übersprungen. Die Vorschau ist 20 Minuten gültig.</p><div class="table-wrap"><table><thead><tr><th>Zeile</th><th>Name</th><th>Feuerwehr</th><th>Ausbildungsbeginn</th><th>Lehrgang</th><th>Aktion</th></tr></thead><tbody>';
+    foreach($rows as $row)echo '<tr><td>'.(int)$row['line'].'</td><td>'.h($row['last_name'].', '.$row['first_name']).'</td><td>'.h($row['department']).'</td><td>'.h($row['start_date']).'</td><td>'.h($row['course']).'</td><td>'.($row['duplicate']?'Überspringen (bereits vorhanden / doppelt)':'Neu anlegen').'</td></tr>';
+    echo '</tbody></table></div><div class="actions"><form method="post">'.csrf().'<input type="hidden" name="action" value="csv_confirm"><input type="hidden" name="import_token" value="'.h($draft['token']).'"><button'.($new===0?' disabled':'').'>'.$new.' Teilnehmer importieren</button></form><form method="post">'.csrf().'<input type="hidden" name="action" value="csv_cancel"><button class="secondary">Vorschau verwerfen</button></form></div></section>';
+}

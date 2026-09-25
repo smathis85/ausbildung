@@ -1,6 +1,7 @@
 <?php
 declare(strict_types=1);
 require __DIR__.'/../app/Store.php';
+require __DIR__.'/../app/ParticipantCsv.php';
 require __DIR__.'/../app/ParticipantAccess.php';
 require __DIR__.'/../app/ParticipantOverview.php';
 use Ausbildung\Store;
@@ -125,6 +126,7 @@ if($_SERVER['REQUEST_METHOD']==='POST') {
             session_regenerate_id(true); $_SESSION=['uid'=>1,'version'=>(int)$account['version'],'seen'=>time(),'created'=>time(),'csrf'=>bin2hex(random_bytes(32))]; go('/');
         }
         if(!$auth) { http_response_code($participantAuth?403:401); throw new RuntimeException('Dieser Vorgang ist nur für die Ausbildungsverwaltung erlaubt.'); }
+        require __DIR__.'/../app/csv-actions.php';
         if($action==='participant_access'){
             $access->configure(isset($_POST['enabled']),field('access_code','',128),number('access_version',1,PHP_INT_MAX));
             $_SESSION['flash']='Teilnehmerzugang gespeichert. Bestehende Teilnehmeranmeldungen wurden beendet.';go('/?page=account');
@@ -213,7 +215,11 @@ if(!$auth) {
 $years=array_map('intval',array_column($s->rows('SELECT DISTINCT year FROM enrollments UNION SELECT DISTINCT year FROM lessons ORDER BY year DESC'),'year'));
 $year=filter_var($_GET['year']??($years[0]??date('Y')),FILTER_VALIDATE_INT); if(!$year||$year<2010||$year>2100)$year=(int)date('Y');
 $id=filter_var($_GET['id']??0,FILTER_VALIDATE_INT)?:0;
-$titles=['dashboard'=>'Ausbildungsübersicht','person'=>'Teilnehmer','lessons'=>'Termine & Anwesenheiten','lesson'=>'Anwesenheit erfassen','import'=>'Importprüfung','account'=>'Dein Zugang'];
+if($page==='csv-template'){
+    header('Content-Type: text/csv; charset=UTF-8');header('Content-Disposition: attachment; filename=teilnehmer-vorlage.csv');
+    echo "\xEF\xBB\xBFVorname;Nachname;Feuerwehr;Ausbildungsbeginn;Lehrgang\r\n";exit;
+}
+$titles=['csv-import'=>'Teilnehmer importieren','dashboard'=>'Ausbildungsübersicht','person'=>'Teilnehmer','lessons'=>'Termine & Anwesenheiten','lesson'=>'Anwesenheit erfassen','import'=>'Importprüfung','account'=>'Dein Zugang'];
 if(!isset($titles[$page])&&$page!=='export') { http_response_code(404);$page='dashboard'; }
 if($page==='export') {
     header('Content-Type: text/csv; charset=UTF-8');header('Content-Disposition: attachment; filename="ausbildung-'.$year.'.csv"');
@@ -228,11 +234,12 @@ if(in_array($page,['dashboard','lessons'],true)) {
     foreach($years as $y)echo '<option '.($y===$year?'selected':'').'>'.$y.'</option>';
     echo '</select></label><button class="secondary">Jahr anzeigen</button></form>';
 }
+if($page==='csv-import')require __DIR__.'/../app/csv-page.php';
 if($page==='dashboard') {
     $people=$s->participants($year);$active=array_filter($people,fn($p)=>!$p['archived']);$ready=count(array_filter($active,fn($p)=>$p['total']>=10&&!$p['exam_date']&&!$p['exam_label']));
     $passed=count(array_filter($people,fn($p)=>$p['exam_date']||$p['exam_label']));
     echo '<div class="stats"><section class="card"><span>Teilnehmer '.$year.'</span><strong>'.count($people).'</strong></section><section class="card"><span>Ab 10 Teilnahmen · prüfungsberechtigt, noch ohne Prüfung</span><strong>'.$ready.'</strong></section><section class="card"><span>Prüfung bestanden</span><strong>'.$passed.'</strong></section></div>';
-    echo '<section class="card"><div class="toolbar"><div><h2>Teilnehmer</h2><p class="muted">Gesamtstand bis einschließlich '.$year.'</p></div><div class="actions"><a class="button secondary" href="/?page=export&year='.$year.'">CSV exportieren</a><a class="button" href="/?page=person&year='.$year.'">Teilnehmer hinzufügen</a></div></div><div class="filters"><label>Suchen<input id="search" type="search" placeholder="Name oder Feuerwehr"></label><label>Feuerwehr<select id="department"><option value="">Alle Feuerwehren</option>';
+    echo '<section class="card"><div class="toolbar"><div><h2>Teilnehmer</h2><p class="muted">Gesamtstand bis einschließlich '.$year.'</p></div><div class="actions"><a class="button secondary" href="/?page=csv-import">CSV importieren</a><a class="button secondary" href="/?page=export&year='.$year.'">CSV exportieren</a><a class="button" href="/?page=person&year='.$year.'">Teilnehmer hinzufügen</a></div></div><div class="filters"><label>Suchen<input id="search" type="search" placeholder="Name oder Feuerwehr"></label><label>Feuerwehr<select id="department"><option value="">Alle Feuerwehren</option>';
     $deps=array_unique(array_column($people,'department'));sort($deps);foreach($deps as $d)echo '<option>'.h($d).'</option>';
     echo '</select></label><label>Status<select id="status"><option value="active">Aktive Teilnehmer</option><option value="">Alle</option><option value="pending">Unter 10 Teilnahmen</option><option value="ready10">10 Teilnahmen erreicht</option><option value="ready">12 Teilnahmen erreicht</option><option value="passed">Prüfung bestanden</option><option value="completed">Abgeschlossen</option><option value="archived">Archiviert</option></select></label></div><div class="table-wrap"><table id="participants"><thead><tr><th>Name</th><th>Feuerwehr</th><th>Dieses Jahr</th><th>Gesamt</th><th>Stand</th></tr></thead><tbody>';
     foreach($people as $p){$st=$p['archived']?'archived':(($p['exam_date']||$p['exam_label'])?($p['total']>=12?'completed':'passed'):($p['total']>=12?'ready':($p['total']>=10?'ready10':'pending')));echo '<tr data-department="'.h($p['department']).'" data-status="'.$st.'"><td><a href="/?page=person&id='.$p['id'].'&year='.$year.'">'.h($p['last_name'].', '.$p['first_name']).'</a>'.($p['archived']?' <small>Archiviert</small>':'').'</td><td>'.h($p['department']).'</td><td>'.(int)$p['annual'].'</td><td><strong>'.(int)$p['total'].'</strong> / 10</td><td>'.status($p).'</td></tr>';}
@@ -275,6 +282,7 @@ if($page==='lesson') {
     echo '</div><div class="save-bar"><button>Anwesenheiten speichern</button></div></form></section>';
 }
 if($page==='import') {
+    echo '<section class="card"><h2>Neue Teilnehmer importieren</h2><a class="button" href="/?page=csv-import">CSV-Datei importieren</a></section>';
     $imp=$s->one('SELECT * FROM imports ORDER BY id DESC LIMIT 1');
     echo '<section class="card"><h2>Excel-Übernahme</h2><p>Es wurden nur Teilnehmer und ihre x-Markierungen übernommen. Summenzeilen, veraltete Excel-Ergebnisse und leere Vorlagenzeilen zählen nicht als Teilnahme.</p><p>Die Gesamtzahl entsteht aus Einzelteilnahmen plus nachvollziehbaren Vorträgen/Korrekturen. Jahresüberträge werden dadurch nicht doppelt gezählt. Fehlende Inhalte und Termine wurden nicht erfunden.</p>';
     if($imp){$sum=json_decode($imp['summary'],true);echo '<p>'.$sum['people'].' Personen · '.$sum['lessons'].' Ausbildungseinheit(en) · '.$sum['attendance'].' Einzelteilnahmen</p><div class="table-wrap"><table><thead><tr><th>Jahr</th><th>Personen in Liste</th><th>Einzelteilnahmen</th></tr></thead><tbody>';foreach($sum['years']as $r)echo '<tr><td>'.$r['year'].'</td><td>'.$r['people'].'</td><td>'.$r['attendance'].'</td></tr>';echo '</tbody></table></div><p class="muted">Alle importierten Jahresstände wurden gegen die Einzelmarkierungen und Vorträge abgeglichen.</p>';}
