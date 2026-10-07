@@ -17,3 +17,11 @@ Fehler führen zum vollständigen Rollback. Audit enthält Jahr und Anzahlen, ke
 Keine Migration erforderlich. Nach ausdrücklicher Freigabe auf DEV und Produktion bereitgestellt. Produktionsdateien mit DEV verglichen, Datenbank vorher gesichert und Anmeldeschutz der CSV-Routen geprüft. Es wurden keine Teilnehmer beim Deployment importiert.
 
 Tests: participant_csv.php, csv_http.py, participant_http.py, web_smoke.py.
+
+## Upload-Verzeichnis (07.10.2026)
+
+PHP speicherte Uploads in `/tmp/ausbildung` bzw. `/tmp/ausbildung-dev`. Ubuntu leert `/tmp` beim Neustart,
+danach scheiterte jeder CSV-Upload mit „Bitte eine CSV-Datei auswählen“. Upload- und Temp-Verzeichnis liegen
+jetzt dauerhaft unter `/var/lib/<instanz>/tmp` (FPM-Pools, Installer). Bestehende Server einmalig mit
+`sudo bash deploy/fix-upload-tmp.sh prod` bzw. `dev` umstellen. Serverseitige Upload-Fehler zeigen jetzt eine
+eigene Meldung und werden im PHP-Fehlerlog protokolliert.

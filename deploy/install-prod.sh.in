@@ -31,7 +31,7 @@ tar --no-same-owner -xf "$stage/code.tar" -C "$tmp"
 if ! id ausbildung >/dev/null 2>&1; then useradd --system --user-group --home-dir "$data" --shell /usr/sbin/nologin ausbildung; fi
 install -d -o root -g root -m 0755 "$app"
 touch "$app/.ausbildung-prod-owned"
-install -d -o ausbildung -g ausbildung -m 0700 "$data" "$data/sessions" "$data/backups" /tmp/ausbildung
+install -d -o ausbildung -g ausbildung -m 0700 "$data" "$data/sessions" "$data/backups" "$data/tmp"
 touch "$data/.ausbildung-prod-owned"
 if [[ -f "$data/training.sqlite" && -f "$app/bin/backup.php" ]]; then
     runuser -u ausbildung -- env TRAINING_DATA_DIR="$data" php "$app/bin/backup.php"

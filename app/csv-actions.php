@@ -5,7 +5,13 @@ if($action==='csv_preview'){
     unset($_SESSION['csv_import']);
     $year=number('year',2010,2100);
     $file=$_FILES['csv_file']??null;
-    if(!is_array($file)||($file['error']??UPLOAD_ERR_NO_FILE)!==UPLOAD_ERR_OK||!is_string($file['tmp_name']??null)||!is_uploaded_file($file['tmp_name']))throw new RuntimeException('Bitte eine CSV-Datei auswählen (maximal 512 KB).');
+    $uploadError=is_array($file)?(int)($file['error']??UPLOAD_ERR_NO_FILE):UPLOAD_ERR_NO_FILE;
+    if(in_array($uploadError,[UPLOAD_ERR_NO_TMP_DIR,UPLOAD_ERR_CANT_WRITE,UPLOAD_ERR_EXTENSION],true)){
+        error_log('CSV-Upload: Serverfehler beim Zwischenspeichern (PHP-Upload-Code '.$uploadError.')');
+        throw new RuntimeException('Der Server konnte die Datei nicht zwischenspeichern. Bitte die Administration informieren.');
+    }
+    if($uploadError===UPLOAD_ERR_INI_SIZE||$uploadError===UPLOAD_ERR_FORM_SIZE)throw new RuntimeException('Die CSV-Datei darf höchstens 512 KB groß sein.');
+    if($uploadError!==UPLOAD_ERR_OK||!is_string($file['tmp_name']??null)||!is_uploaded_file($file['tmp_name']))throw new RuntimeException('Bitte eine CSV-Datei auswählen (maximal 512 KB).');
     if(($file['size']??0)>524288)throw new RuntimeException('Die CSV-Datei darf höchstens 512 KB groß sein.');
     if(strtolower(pathinfo($file['name']??'',PATHINFO_EXTENSION))!=='csv')throw new RuntimeException('Bitte eine Datei mit der Endung .csv auswählen.');
     $rows=Ausbildung\ParticipantCsv::parse(file_get_contents($file['tmp_name']));
