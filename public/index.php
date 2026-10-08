@@ -6,6 +6,8 @@ require __DIR__.'/../app/ParticipantAccess.php';
 require __DIR__.'/../app/ParticipantOverview.php';
 require __DIR__.'/../app/AdminAccounts.php';
 require __DIR__.'/../app/Documents.php';
+require __DIR__.'/../app/Schedule.php';
+require __DIR__.'/../app/schedule-view.php';
 use Ausbildung\Store;
 date_default_timezone_set('Europe/Berlin');
 umask(0077);
@@ -80,8 +82,8 @@ function input(string $label,string $name,mixed $value='',string $type='text',st
     return '<label>'.h($label).'<input type="'.h($type).'" name="'.h($name).'" value="'.h($value).'" '.$extra.'></label>';
 }
 function head(string $title,bool $auth=true): void {
-    echo '<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>'.h($title).' · Ausbildung</title><link rel="manifest" href="/?asset=app-manifest-v1"><link rel="apple-touch-icon" sizes="180x180" href="/?asset=app-icon-180-v1"><link rel="icon" type="image/png" sizes="192x192" href="/?asset=app-icon-192-v1"><meta name="apple-mobile-web-app-title" content="Ausbildung"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="theme-color" content="#142d36"><link rel="stylesheet" href="/assets/app.css?v=print2"><script defer src="/assets/app.js?v=docs1"></script></head><body><header><a class="brand" href="/"><img class="brand-logo" src="/?asset=brand-logo" width="44" height="51" alt="Wappen der Verbandsgemeinde Selters"><span>Ausbildung <small>VG Selters'.(TRAINING_PRODUCTION?'':' · DEV').'</small></span></a>';
-    if($auth) echo '<nav aria-label="Hauptnavigation"><a href="/">Übersicht</a><a href="/?page=lessons">Termine</a><a href="/?page=documents">Unterlagen</a><a href="/?page=import">Importprüfung</a><a href="/?page=account">Zugang</a><form method="post">'.csrf().'<input type="hidden" name="action" value="logout"><button class="subtle">Abmelden</button></form></nav>';
+    echo '<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>'.h($title).' · Ausbildung</title><link rel="manifest" href="/?asset=app-manifest-v1"><link rel="apple-touch-icon" sizes="180x180" href="/?asset=app-icon-180-v1"><link rel="icon" type="image/png" sizes="192x192" href="/?asset=app-icon-192-v1"><meta name="apple-mobile-web-app-title" content="Ausbildung"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="theme-color" content="#142d36"><link rel="stylesheet" href="/assets/app.css?v=plan1"><script defer src="/assets/app.js?v=plan1"></script></head><body><header><a class="brand" href="/"><img class="brand-logo" src="/?asset=brand-logo" width="44" height="51" alt="Wappen der Verbandsgemeinde Selters"><span>Ausbildung <small>VG Selters'.(TRAINING_PRODUCTION?'':' · DEV').'</small></span></a>';
+    if($auth) echo '<nav aria-label="Hauptnavigation"><a href="/">Übersicht</a><a href="/?page=schedule">Terminplan</a><a href="/?page=lessons">Termine</a><a href="/?page=documents">Unterlagen</a><a href="/?page=import">Importprüfung</a><a href="/?page=account">Zugang</a><form method="post">'.csrf().'<input type="hidden" name="action" value="logout"><button class="subtle">Abmelden</button></form></nav>';
     echo '</header><main><h1>'.h($title).'</h1>';
     if(isset($_SESSION['flash'])) { echo '<p class="notice" role="status">'.h($_SESSION['flash']).'</p>'; unset($_SESSION['flash']); }
 }
@@ -93,6 +95,7 @@ try {
 $page=is_string($_GET['page']??null)?$_GET['page']:'dashboard';
 $admins=new Ausbildung\AdminAccounts($s);
 $documents=new Ausbildung\Documents($s,$dataDir.'/documents');
+$schedule=new Ausbildung\Schedule($s);
 $account=is_int($_SESSION['uid']??null)?$admins->byId($_SESSION['uid']):null;
 $auth=$account!==null && $account['password_hash']!==null && ($_SESSION['version']??null)===(int)$account['version'] && time()-($_SESSION['seen']??0)<7200 && time()-($_SESSION['created']??0)<43200;
 if($auth) $_SESSION['seen']=time(); else { unset($_SESSION['uid']); $account=null; }
@@ -153,6 +156,7 @@ if($_SERVER['REQUEST_METHOD']==='POST') {
         }
         if(!$auth) { http_response_code($participantAuth?403:401); throw new RuntimeException('Dieser Vorgang ist nur für die Ausbildungsverwaltung erlaubt.'); }
         require __DIR__.'/../app/csv-actions.php';
+        require __DIR__.'/../app/schedule-actions.php';
         if($action==='participant_access'){
             $access->configure(isset($_POST['enabled']),field('access_code','',128),number('access_version',1,PHP_INT_MAX));
             $_SESSION['flash']='Teilnehmerzugang gespeichert. Bestehende Teilnehmeranmeldungen wurden beendet.';go('/?page=account');
@@ -207,6 +211,7 @@ if($_SERVER['REQUEST_METHOD']==='POST') {
                 if($id) {
                     $old=$s->one('SELECT * FROM lessons WHERE id=?',[$id]);
                     if(!$old||(int)$old['year']!==$year) throw new RuntimeException('Jahr eines bestehenden Termins bleibt erhalten.');
+                    if($old['schedule_id']!==null) throw new RuntimeException('Dieser Termin wird im Terminplan gepflegt.');
                     if(!$s->run('UPDATE lessons SET date=?,title=?,unit=?,version=version+1 WHERE id=? AND version=?',[$date,$title,$unit,$id,number('version',1,PHP_INT_MAX)])) throw new RuntimeException('Termin inzwischen geändert. Bitte neu laden.');
                 } else { $s->run('INSERT INTO lessons(year,date,title,unit) VALUES(?,?,?,?)',[$year,$date,$title,$unit]);$id=(int)$s->db->lastInsertId(); }
                 $s->audit('lesson_saved','lesson',$id);
@@ -278,7 +283,7 @@ if($page==='csv-template'){
     header('Content-Type: text/csv; charset=UTF-8');header('Content-Disposition: attachment; filename=teilnehmer-vorlage.csv');
     echo "\xEF\xBB\xBFVorname;Nachname;Feuerwehr;Ausbildungsbeginn;Lehrgang\r\n";exit;
 }
-$titles=['csv-import'=>'Teilnehmer importieren','dashboard'=>'Ausbildungsübersicht','person'=>'Teilnehmer','lessons'=>'Termine & Anwesenheiten','lesson'=>'Anwesenheit erfassen','import'=>'Importprüfung','account'=>'Dein Zugang','documents'=>'Unterlagen'];
+$titles=['csv-import'=>'Teilnehmer importieren','dashboard'=>'Ausbildungsübersicht','person'=>'Teilnehmer','lessons'=>'Termine & Anwesenheiten','lesson'=>'Anwesenheit erfassen','import'=>'Importprüfung','account'=>'Dein Zugang','documents'=>'Unterlagen','schedule'=>'Terminplan','schedule-entry'=>'Terminplan'];
 if(!isset($titles[$page])&&$page!=='export') { http_response_code(404);$page='dashboard'; }
 if($page==='export') {
     header('Content-Type: text/csv; charset=UTF-8');header('Content-Disposition: attachment; filename="ausbildung-'.$year.'.csv"');
@@ -295,6 +300,7 @@ if(in_array($page,['dashboard','lessons'],true)) {
 }
 if($page==='csv-import')require __DIR__.'/../app/csv-page.php';
 if($page==='documents')require __DIR__.'/../app/documents-page.php';
+if(in_array($page,['schedule','schedule-entry'],true))require __DIR__.'/../app/schedule-pages.php';
 if($page==='dashboard') {
     $people=$s->participants($year);$active=array_filter($people,fn($p)=>!$p['archived']);$ready=count(array_filter($active,fn($p)=>$p['total']>=10&&!$p['exam_date']&&!$p['exam_label']));
     $passed=count(array_filter($people,fn($p)=>$p['exam_date']||$p['exam_label']));
@@ -329,13 +335,16 @@ if($page==='person') {
     }
 }
 if($page==='lessons') {
-    echo '<section class="card"><div class="toolbar"><h2>Termine '.$year.'</h2><button type="button" class="secondary" id="print">Drucken</button></div><div class="table-wrap"><table><thead><tr><th>Datum</th><th>Ausbildungseinheit(en)</th><th>Inhalt</th><th>Anwesend</th></tr></thead><tbody>';
-    foreach($s->rows('SELECT l.*,(SELECT COUNT(*) FROM attendance a WHERE a.lesson_id=l.id) AS count FROM lessons l WHERE year=? ORDER BY date,unit,id',[$year])as $l)echo '<tr><td>'.h($l['date']?date('d.m.Y',strtotime($l['date'])):'Datum offen').'</td><td>'.$l['unit'].'</td><td><a href="/?page=lesson&id='.$l['id'].'">'.h($l['title']).'</a></td><td>'.$l['count'].'</td></tr>';
+    echo '<p class="notice no-print">Termine entstehen am besten aus dem <a href="/?page=schedule&year='.$year.'">Terminplan</a>: Datum, Thema und Ausbildungseinheiten werden von dort übernommen.</p><section class="card"><div class="toolbar"><h2>Termine '.$year.'</h2><button type="button" class="secondary" id="print">Drucken</button></div><div class="table-wrap"><table><thead><tr><th>Datum</th><th>Ausbildungseinheit(en)</th><th>Inhalt</th><th>Anwesend</th></tr></thead><tbody>';
+    foreach($s->rows('SELECT l.*,(SELECT COUNT(*) FROM attendance a WHERE a.lesson_id=l.id) AS count FROM lessons l WHERE year=? ORDER BY date,unit,id',[$year])as $l)echo '<tr><td>'.h($l['date']?date('d.m.Y',strtotime($l['date'])):'Datum offen').'</td><td>'.$l['unit'].'</td><td><a href="/?page=lesson&id='.$l['id'].'">'.h($l['title']).'</a>'.($l['schedule_id']!==null?' <small>Terminplan</small>':'').'</td><td>'.$l['count'].'</td></tr>';
     echo '</tbody></table></div></section><section class="card"><h2>Termin hinzufügen</h2><form method="post">'.csrf().'<input type="hidden" name="action" value="lesson"><input type="hidden" name="id" value="0"><input type="hidden" name="year" value="'.$year.'"><div class="form-grid">'.input('Datum','date','','date','required').input('Ausbildungseinheit(en) am selben Tag','unit',1,'number','min="1" max="20" required').input('Ausbildungsinhalt','title','','text','required maxlength="200"').'</div><button>Termin anlegen</button></form></section>';
 }
 if($page==='lesson') {
     $l=$s->one('SELECT * FROM lessons WHERE id=?',[$id]);if(!$l){http_response_code(404);echo '<p>Termin nicht gefunden.</p>';foot();exit;}
-    echo '<a href="/?page=lessons&year='.$l['year'].'">← Zu den Terminen</a><section class="card lesson-head"><h2>'.h($l['title']).'</h2><p>'.h($l['date']?date('d.m.Y',strtotime($l['date'])):$l['year'].' · Datum offen').' · Ausbildungseinheit(en) '.$l['unit'].'</p><details><summary>Termin bearbeiten</summary><form method="post">'.csrf().'<input type="hidden" name="action" value="lesson"><input type="hidden" name="id" value="'.$id.'"><input type="hidden" name="year" value="'.$l['year'].'"><input type="hidden" name="version" value="'.$l['version'].'"><div class="form-grid">'.input('Datum','date',$l['date'],'date').input('Ausbildungseinheit(en)','unit',$l['unit'],'number','required min="1" max="20"').input('Ausbildungsinhalt','title',$l['title'],'text','required maxlength="200"').'</div><button>Termin speichern</button></form></details></section>';
+    echo '<a href="/?page=lessons&year='.$l['year'].'">← Zu den Terminen</a><section class="card lesson-head"><h2>'.h($l['title']).'</h2><p>'.h($l['date']?date('d.m.Y',strtotime($l['date'])):$l['year'].' · Datum offen').' · Ausbildungseinheit(en) '.$l['unit'].'</p>';
+    $planned=$l['schedule_id']!==null?$schedule->find((int)$l['schedule_id']):null;
+    if($planned)echo '<p class="lesson-plan">'.($planned['time_text']!==''?h(preg_replace('/\s*\n\s*/',' ',$planned['time_text'])).' · ':'').($planned['instructors']!==''?'Ausbilder: '.h(preg_replace('/\s*\n\s*/','; ',$planned['instructors'])):'').'</p><p class="no-print"><a href="/?page=schedule-entry&id='.(int)$planned['id'].'">Im Terminplan bearbeiten</a></p></section>';
+    else echo '<details><summary>Termin bearbeiten</summary><form method="post">'.csrf().'<input type="hidden" name="action" value="lesson"><input type="hidden" name="id" value="'.$id.'"><input type="hidden" name="year" value="'.$l['year'].'"><input type="hidden" name="version" value="'.$l['version'].'"><div class="form-grid">'.input('Datum','date',$l['date'],'date').input('Ausbildungseinheit(en)','unit',$l['unit'],'number','required min="1" max="20"').input('Ausbildungsinhalt','title',$l['title'],'text','required maxlength="200"').'</div><button>Termin speichern</button></form></details></section>';
     $present=array_map('intval',array_column($s->rows('SELECT participant_id FROM attendance WHERE lesson_id=?',[$id]),'participant_id'));
     echo '<section class="card attendance-card"><div class="toolbar"><h2>Anwesenheit</h2><button type="button" class="secondary" id="print">Liste drucken</button></div><p>'.count($present).' Teilnahmen erfasst. Bei getrennten Ausbildungseinheiten am selben Tag jede Ausbildungseinheit separat pflegen.</p><form method="post">'.csrf().'<input type="hidden" name="action" value="attendance"><input type="hidden" name="id" value="'.$id.'"><input type="hidden" name="version" value="'.$l['version'].'"><div class="attendance-list">';
     foreach($s->participants((int)$l['year'])as $p){$isPresent=in_array((int)$p['id'],$present,true);echo '<label class="attendance-person'.($p['archived']&&!$isPresent?' print-skip':'').'"><input type="checkbox" name="present[]" value="'.$p['id'].'" '.($isPresent?'checked':'').'><span><strong>'.h($p['last_name'].', '.$p['first_name']).'</strong><small>'.h($p['department']).($p['archived']?' · Archiviert':'').'</small></span><span class="signature" aria-hidden="true"></span></label>';}

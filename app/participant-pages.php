@@ -2,6 +2,17 @@
 declare(strict_types=1);
 // Included after authentication processing. All IDs come from the server session.
 if($participantAuth){
+    if($page==='schedule'){
+        $published=$schedule->years(true);
+        $wanted=filter_var($_GET['year']??0,FILTER_VALIDATE_INT);
+        $planYear=in_array($wanted,$published,true)?$wanted:(in_array((int)date('Y'),$published,true)?(int)date('Y'):($published[0]??(int)date('Y')));
+        head('Terminplan',false);
+        echo '<div class="toolbar no-print"><a href="/?page=me">← Meine Teilnahmen</a><button type="button" class="secondary" id="print">Drucken</button></div>';
+        if(count($published)>1)echo schedule_year_select('schedule',$published,$planYear);
+        if(!$published)echo '<p>Es ist noch kein Terminplan freigegeben.</p>';
+        else echo '<section class="card schedule-card">'.schedule_document($schedule->settings($planYear),$schedule->entries($planYear),false).'</section>';
+        foot();exit;
+    }
     if($page!=='me'&&$page!=='dashboard'){
         http_response_code(403);head('Kein Zugriff',false);
         echo '<p>Dieser Bereich ist der Ausbildungsverwaltung vorbehalten.</p><a href="/?page=me">Zu meinen Teilnahmen</a>';foot();exit;
@@ -17,6 +28,15 @@ if($participantAuth){
         if($latest['exam_passed'])echo '<p class="badge passed">Prüfung bestanden'.($latest['exam_date']?' am '.h(date('d.m.Y',strtotime($latest['exam_date']))):'').'</p>';
         echo '</section>';
     }else echo '<p>Noch keine Ausbildungsstände hinterlegt.</p>';
+    $next=$schedule->upcoming(3);
+    echo '<section class="card"><div class="toolbar"><h2>Nächste Termine</h2><a class="button secondary" href="/?page=schedule">Ganzen Terminplan ansehen</a></div>';
+    if(!$next)echo '<p>Derzeit sind keine weiteren Termine eingetragen.</p>';
+    else{
+        echo '<ul class="upcoming">';
+        foreach($next as $e)echo '<li><strong>'.h(Ausbildung\Schedule::weekday($e['date']).', '.date('d.m.Y',strtotime($e['date']))).'</strong> '.h(preg_replace('/\s*\n\s*/',' ',$e['time_text'])).'<br>'.h($e['topic']).($e['notes']!==''?'<small class="schedule-note">'.h(preg_replace('/\s*\n\s*/',' · ',$e['notes'])).'</small>':'').'</li>';
+        echo '</ul>';
+    }
+    echo '</section>';
     $docs=$documents->all(true);
     if($docs){
         echo '<section class="card" id="unterlagen"><h2>Unterlagen</h2><ul class="documents">';

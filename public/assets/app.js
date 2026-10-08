@@ -5,3 +5,6 @@ if(search){for(const input of [search,department,statusFilter])input.addEventLis
 document.getElementById('print')?.addEventListener('click',()=>window.print());
 for(const form of document.querySelectorAll('form[data-confirm]'))form.addEventListener('submit',event=>{if(!window.confirm(form.dataset.confirm))event.preventDefault();});
 for(const input of document.querySelectorAll('input[type=file][data-max-bytes]'))input.addEventListener('change',()=>{const file=input.files[0];input.setCustomValidity(file&&file.size>Number(input.dataset.maxBytes)?'Die Datei ist zu groß.':'');input.reportValidity();});
+// Terminplan: switching between Saturday and weekday adjusts an untouched default time.
+const planDate=document.querySelector('.schedule-form input[name=date]'),planTime=document.querySelector('.schedule-form textarea[name=time_text]');
+if(planDate&&planTime)planDate.addEventListener('change',()=>{if(!planDate.value)return;const saturday=new Date(planDate.value+'T12:00:00').getDay()===6,defaults=[planTime.dataset.weekday,planTime.dataset.saturday];if(planTime.value.trim()===''||defaults.includes(planTime.value.replace(/\r/g,'')))planTime.value=saturday?planTime.dataset.saturday:planTime.dataset.weekday;});

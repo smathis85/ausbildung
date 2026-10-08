@@ -27,7 +27,7 @@ final class Store
         $this->db->exec(<<<'SQL'
 CREATE TABLE IF NOT EXISTS accounts(id INTEGER PRIMARY KEY,email TEXT NOT NULL UNIQUE,name TEXT NOT NULL DEFAULT '',password_hash TEXT,setup_hash TEXT,setup_expires INTEGER,version INTEGER NOT NULL DEFAULT 1,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS participants(id INTEGER PRIMARY KEY,source_key TEXT UNIQUE,last_name TEXT NOT NULL,first_name TEXT NOT NULL,department TEXT NOT NULL,archived INTEGER NOT NULL DEFAULT 0,version INTEGER NOT NULL DEFAULT 1);
-CREATE TABLE IF NOT EXISTS lessons(id INTEGER PRIMARY KEY,source_key TEXT UNIQUE,year INTEGER NOT NULL,date TEXT,unit INTEGER NOT NULL DEFAULT 1,title TEXT NOT NULL,source_label TEXT,version INTEGER NOT NULL DEFAULT 1);
+CREATE TABLE IF NOT EXISTS lessons(id INTEGER PRIMARY KEY,source_key TEXT UNIQUE,year INTEGER NOT NULL,date TEXT,unit INTEGER NOT NULL DEFAULT 1,title TEXT NOT NULL,source_label TEXT,version INTEGER NOT NULL DEFAULT 1,schedule_id INTEGER REFERENCES schedule_entries(id));
 CREATE TABLE IF NOT EXISTS enrollments(participant_id INTEGER NOT NULL REFERENCES participants(id),year INTEGER NOT NULL,adjustment INTEGER NOT NULL DEFAULT 0,adjustment_reason TEXT NOT NULL DEFAULT '',source_carry INTEGER,source_total INTEGER,start_label TEXT NOT NULL DEFAULT '',start_date TEXT,course TEXT NOT NULL DEFAULT '',exam_date TEXT,exam_label TEXT NOT NULL DEFAULT '',reported TEXT NOT NULL DEFAULT '',comment TEXT NOT NULL DEFAULT '',version INTEGER NOT NULL DEFAULT 1,PRIMARY KEY(participant_id,year));
 CREATE TABLE IF NOT EXISTS attendance(participant_id INTEGER NOT NULL,lesson_id INTEGER NOT NULL REFERENCES lessons(id),created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,PRIMARY KEY(participant_id,lesson_id),FOREIGN KEY(participant_id) REFERENCES participants(id));
 CREATE TABLE IF NOT EXISTS audit(id INTEGER PRIMARY KEY,at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,event TEXT NOT NULL,entity TEXT,entity_id INTEGER,details TEXT NOT NULL DEFAULT '{}');
@@ -35,6 +35,9 @@ CREATE TABLE IF NOT EXISTS imports(id INTEGER PRIMARY KEY,source_hash TEXT NOT N
 CREATE TABLE IF NOT EXISTS rate_limits(key TEXT PRIMARY KEY,attempts INTEGER NOT NULL,started INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS participant_access(id INTEGER PRIMARY KEY CHECK(id=1),code_hash TEXT,enabled INTEGER NOT NULL DEFAULT 0,version INTEGER NOT NULL DEFAULT 1);
 INSERT OR IGNORE INTO participant_access(id) VALUES(1);
+CREATE TABLE IF NOT EXISTS schedule_entries(id INTEGER PRIMARY KEY,year INTEGER NOT NULL,date TEXT NOT NULL,time_text TEXT NOT NULL DEFAULT '',topic TEXT NOT NULL,content TEXT NOT NULL DEFAULT '',vehicles TEXT NOT NULL DEFAULT '',instructors TEXT NOT NULL DEFAULT '',notes TEXT NOT NULL DEFAULT '',units INTEGER CHECK(units IS NULL OR units BETWEEN 1 AND 4),version INTEGER NOT NULL DEFAULT 1,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE INDEX IF NOT EXISTS schedule_entries_year ON schedule_entries(year,date);
+CREATE TABLE IF NOT EXISTS schedule_years(year INTEGER PRIMARY KEY,title TEXT NOT NULL,subtitle TEXT NOT NULL DEFAULT '',footer TEXT NOT NULL DEFAULT '',published INTEGER NOT NULL DEFAULT 1 CHECK(published IN (0,1)),version INTEGER NOT NULL DEFAULT 1);
 CREATE TABLE IF NOT EXISTS documents(id INTEGER PRIMARY KEY,title TEXT NOT NULL,description TEXT NOT NULL DEFAULT '',original_name TEXT NOT NULL,stored_name TEXT NOT NULL UNIQUE,extension TEXT NOT NULL,size INTEGER NOT NULL,sha256 TEXT NOT NULL,visible INTEGER NOT NULL DEFAULT 1 CHECK(visible IN (0,1)),uploaded_by INTEGER,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,version INTEGER NOT NULL DEFAULT 1);
 SQL);
         $this->transaction(function() {
@@ -47,6 +50,12 @@ SQL);
                     DROP TABLE accounts_single_admin;");
                 $this->audit('accounts_multi_admin_migrated');
             }
+            // Terminplan (10/2026): lessons belonging to a schedule entry.
+            if(!in_array('schedule_id',array_column($this->rows('PRAGMA table_info(lessons)'),'name'),true)){
+                $this->db->exec('ALTER TABLE lessons ADD COLUMN schedule_id INTEGER REFERENCES schedule_entries(id)');
+                $this->audit('lessons_schedule_link_added');
+            }
+            $this->db->exec('CREATE INDEX IF NOT EXISTS lessons_schedule ON lessons(schedule_id)');
             $columns=array_column($this->rows('PRAGMA table_info(enrollments)'),'name');
             if(!in_array('reported_confirmed',$columns,true)) {
                 $this->db->exec('ALTER TABLE enrollments ADD COLUMN reported_confirmed INTEGER NOT NULL DEFAULT 0 CHECK(reported_confirmed IN (0,1))');
