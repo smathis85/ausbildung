@@ -58,3 +58,29 @@ td details form{margin:8px 0}td details{min-width:150px}td>a{display:inline-bloc
   .attendance-person small { font-size: 7pt; color: #444; }
   .attendance-person .signature { display: block !important; flex: 0 0 40mm; align-self: stretch; margin: 0; border-left: .5pt solid #bbb; }
 }
+
+/* Terminplan: screen view mirrors the printed plan (A4 portrait, bordered table). */
+.schedule-head{display:flex;flex-direction:row-reverse;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:16px}.schedule-head>div{flex:1;text-align:center}.schedule-logo{width:60px;height:auto}
+.schedule-title{font-size:22px;font-weight:750;margin:6px 0 10px}.schedule-subtitle{margin:0 0 6px}
+.schedule-table{border:1px solid #9aa6b2}.schedule-table th,.schedule-table td{border:1px solid #9aa6b2;vertical-align:top;padding:8px 10px}.schedule-table th{text-align:center}
+.schedule-when,.schedule-time{text-align:center;white-space:nowrap}.schedule-time small,.schedule-table td small{display:block;margin-top:6px}
+.schedule-topic{text-decoration:underline;text-underline-offset:2px}.schedule-note{display:block;color:#c0261b}.schedule-table tr.past{color:#59677b}
+.schedule-footer{text-align:center;font-weight:700;margin-top:18px}.schedule-form textarea{min-height:0}.unit-links{margin:0;padding-left:20px}
+.upcoming{list-style:none;margin:0;padding:0}.upcoming li{padding:10px 0;border-bottom:1px solid #e5e9ef}.upcoming li:last-child{border-bottom:0}.upcoming small{display:block}
+@media(max-width:700px){.schedule-head{flex-direction:column;align-items:center}.schedule-title{font-size:18px}}
+@media print{
+  .no-print{display:none!important}
+  body:has(.schedule-doc) main>h1,body:has(.schedule-doc) main>.notice,body:has(.schedule-doc) main>.error{display:none!important}
+  .schedule-card{margin:0;padding:0}
+  .schedule-doc{font-size:9.5pt;line-height:1.25;color:#000}
+  .schedule-head{margin:0 0 5mm}.schedule-logo{width:16mm}.schedule-title{font-size:15pt;margin:2mm 0 4mm}.schedule-subtitle{font-size:10pt;margin:0}
+  .schedule-table{font-size:9.5pt;border:.6pt solid #000}
+  .schedule-table th{background:#d9d9d9!important;color:#000;font-size:9.5pt;text-transform:none;letter-spacing:0;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .schedule-table th,.schedule-table td{border:.6pt solid #000;padding:1mm 1.5mm}
+  .schedule-table tr.past{color:#000}
+  .schedule-note{color:#e00000!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .schedule-footer{font-size:9.5pt;margin-top:5mm}
+  :root,body:has(.schedule-doc){background:#fff}
+  .schedule-table td:nth-child(4),.schedule-table td:nth-child(5){white-space:nowrap}
+}
+@page{@bottom-right{content:"Seite " counter(page);font-size:9pt}}
