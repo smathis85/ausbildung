@@ -25,7 +25,7 @@ final class Store
     }
     public function schema(): void {
         $this->db->exec(<<<'SQL'
-CREATE TABLE IF NOT EXISTS accounts(id INTEGER PRIMARY KEY CHECK(id=1),email TEXT NOT NULL UNIQUE,password_hash TEXT,setup_hash TEXT,setup_expires INTEGER,version INTEGER NOT NULL DEFAULT 1);
+CREATE TABLE IF NOT EXISTS accounts(id INTEGER PRIMARY KEY,email TEXT NOT NULL UNIQUE,name TEXT NOT NULL DEFAULT '',password_hash TEXT,setup_hash TEXT,setup_expires INTEGER,version INTEGER NOT NULL DEFAULT 1,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS participants(id INTEGER PRIMARY KEY,source_key TEXT UNIQUE,last_name TEXT NOT NULL,first_name TEXT NOT NULL,department TEXT NOT NULL,archived INTEGER NOT NULL DEFAULT 0,version INTEGER NOT NULL DEFAULT 1);
 CREATE TABLE IF NOT EXISTS lessons(id INTEGER PRIMARY KEY,source_key TEXT UNIQUE,year INTEGER NOT NULL,date TEXT,unit INTEGER NOT NULL DEFAULT 1,title TEXT NOT NULL,source_label TEXT,version INTEGER NOT NULL DEFAULT 1);
 CREATE TABLE IF NOT EXISTS enrollments(participant_id INTEGER NOT NULL REFERENCES participants(id),year INTEGER NOT NULL,adjustment INTEGER NOT NULL DEFAULT 0,adjustment_reason TEXT NOT NULL DEFAULT '',source_carry INTEGER,source_total INTEGER,start_label TEXT NOT NULL DEFAULT '',start_date TEXT,course TEXT NOT NULL DEFAULT '',exam_date TEXT,exam_label TEXT NOT NULL DEFAULT '',reported TEXT NOT NULL DEFAULT '',comment TEXT NOT NULL DEFAULT '',version INTEGER NOT NULL DEFAULT 1,PRIMARY KEY(participant_id,year));
@@ -35,8 +35,18 @@ CREATE TABLE IF NOT EXISTS imports(id INTEGER PRIMARY KEY,source_hash TEXT NOT N
 CREATE TABLE IF NOT EXISTS rate_limits(key TEXT PRIMARY KEY,attempts INTEGER NOT NULL,started INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS participant_access(id INTEGER PRIMARY KEY CHECK(id=1),code_hash TEXT,enabled INTEGER NOT NULL DEFAULT 0,version INTEGER NOT NULL DEFAULT 1);
 INSERT OR IGNORE INTO participant_access(id) VALUES(1);
+CREATE TABLE IF NOT EXISTS documents(id INTEGER PRIMARY KEY,title TEXT NOT NULL,description TEXT NOT NULL DEFAULT '',original_name TEXT NOT NULL,stored_name TEXT NOT NULL UNIQUE,extension TEXT NOT NULL,size INTEGER NOT NULL,sha256 TEXT NOT NULL,visible INTEGER NOT NULL DEFAULT 1 CHECK(visible IN (0,1)),uploaded_by INTEGER,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,version INTEGER NOT NULL DEFAULT 1);
 SQL);
         $this->transaction(function() {
+            // Until 10/2026 only one administrator (id=1) was allowed. Rebuild once, keeping all credentials.
+            $accountsSql=(string)($this->one("SELECT sql FROM sqlite_master WHERE type='table' AND name='accounts'")['sql']??'');
+            if(str_contains(preg_replace('/\s+/','',$accountsSql),'CHECK(id=1)')){
+                $this->db->exec("ALTER TABLE accounts RENAME TO accounts_single_admin;
+                    CREATE TABLE accounts(id INTEGER PRIMARY KEY,email TEXT NOT NULL UNIQUE,name TEXT NOT NULL DEFAULT '',password_hash TEXT,setup_hash TEXT,setup_expires INTEGER,version INTEGER NOT NULL DEFAULT 1,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+                    INSERT INTO accounts(id,email,password_hash,setup_hash,setup_expires,version) SELECT id,email,password_hash,setup_hash,setup_expires,version FROM accounts_single_admin;
+                    DROP TABLE accounts_single_admin;");
+                $this->audit('accounts_multi_admin_migrated');
+            }
             $columns=array_column($this->rows('PRAGMA table_info(enrollments)'),'name');
             if(!in_array('reported_confirmed',$columns,true)) {
                 $this->db->exec('ALTER TABLE enrollments ADD COLUMN reported_confirmed INTEGER NOT NULL DEFAULT 0 CHECK(reported_confirmed IN (0,1))');

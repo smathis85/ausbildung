@@ -17,6 +17,17 @@ if($participantAuth){
         if($latest['exam_passed'])echo '<p class="badge passed">Prüfung bestanden'.($latest['exam_date']?' am '.h(date('d.m.Y',strtotime($latest['exam_date']))):'').'</p>';
         echo '</section>';
     }else echo '<p>Noch keine Ausbildungsstände hinterlegt.</p>';
+    $docs=$documents->all(true);
+    if($docs){
+        echo '<section class="card" id="unterlagen"><h2>Unterlagen</h2><ul class="documents">';
+        foreach($docs as $d){
+            $open='/?page=document&id='.(int)$d['id'];
+            echo '<li><div><strong>'.h($d['title']).'</strong><small class="doc-description">'.($d['description']!==''?h($d['description']).' · ':'').h(strtoupper($d['extension']).' · '.Ausbildung\Documents::size((int)$d['size'])).'</small></div><div class="actions">';
+            if(Ausbildung\Documents::viewable($d))echo '<a class="button secondary" href="'.$open.'" target="_blank" rel="noopener">Ansehen</a>';
+            echo '<a class="button" href="'.$open.'&download=1">Herunterladen</a></div></li>';
+        }
+        echo '</ul></section>';
+    }
     echo '<section class="card"><h2>Teilnahmen nach Jahr</h2><div class="table-wrap"><table><thead><tr><th>Jahr</th><th>Im Jahr</th><th>Gesamt bis Jahresstand</th></tr></thead><tbody>';
     foreach($overview['years']as$y)echo '<tr><td>'.$y['year'].'</td><td>'.$y['annual'].'</td><td>'.$y['total'].'</td></tr>';
     echo '</tbody></table></div><p class="muted">Gesamtstände enthalten gegebenenfalls Altbestände und bestätigte Korrekturen. Die Jahres-Gesamtstände werden nicht addiert.</p></section><section class="card"><h2>Wann war ich da?</h2><div class="table-wrap"><table><thead><tr><th>Datum / Jahr</th><th>Ausbildungseinheit(en)</th><th>Ausbildungsinhalt</th></tr></thead><tbody>';

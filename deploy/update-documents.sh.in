@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+# Unterlagen (Datei-Upload) und weitere Administratoren. Aufruf: sudo bash update.sh dev|prod
+set -euo pipefail
+umask 077
+[[ $(id -u) == 0 ]] || { echo 'Bitte mit sudo ausführen.'; exit 1; }
+case "${1:-}" in
+    prod) name=ausbildung; owned=.ausbildung-prod-owned; marker=AUSBILDUNG_PROD_V1; host=ausbildung.einsatzleiter.app;;
+    dev) name=ausbildung-dev; owned=.ausbildung-dev-owned; marker=AUSBILDUNG_DEV_V1; host=ausbildung-dev.einsatzleiter.app;;
+    *) echo 'Aufruf: sudo bash update.sh dev|prod'; exit 1;;
+esac
+stage=$(cd "$(dirname "$0")" && pwd)
+app=/opt/$name
+data=/var/lib/$name
+pool=/etc/php/8.3/fpm/pool.d/$name.conf
+site=/etc/nginx/sites-available/$host
+[[ -f "$app/$owned" && -f "$data/$owned" && -f "$data/training.sqlite" ]] || { echo 'Vorhandene Installation fehlt.'; exit 1; }
+grep -q "$marker" "$pool" && grep -q "$marker" "$site" || { echo 'Fremde Konfiguration: Abbruch.'; exit 1; }
+[[ $(sha256sum "$stage/update.tar" | cut -d' ' -f1) == '@@CODE_SHA@@' ]] || { echo 'Paket-Prüfsumme stimmt nicht.'; exit 1; }
+exec 9>"/run/lock/$name-update.lock"
+flock -n 9 || { echo 'Update läuft bereits.'; exit 1; }
+tmp=$(mktemp -d "/tmp/$name-update.XXXXXX")
+trap 'rm -rf "$tmp"' EXIT
+tar -tf "$stage/update.tar" | grep -Eq '(^/|(^|/)\.\.(/|$))' && { echo 'Unsichere Paketpfade.'; exit 1; }
+tar --no-same-owner -xf "$stage/update.tar" -C "$tmp"
+mapfile -t files < <(cd "$tmp" && find app public bin -type f | sort)
+for file in "${files[@]}"; do [[ "$file" != *.php ]] || php -l "$tmp/$file" >/dev/null; done
+# Sicherung von Datenbank, Code und Konfiguration vor jeder Änderung.
+runuser -u "$name" -- env TRAINING_DATA_DIR="$data" php "$app/bin/backup.php"
+stamp=$(date +%Y%m%d%H%M%S)
+install -d -o root -g root -m 0700 /var/backups/ausbildung-code
+tar -czf "/var/backups/ausbildung-code/$name-before-documents-$stamp.tar.gz" -C "$app" app public bin
+cp -a "$pool" "/var/backups/ausbildung-code/$name-pool-before-documents-$stamp.conf"
+cp -a "$site" "/var/backups/ausbildung-code/$name-site-before-documents-$stamp.conf"
+install -d -o "$name" -g "$name" -m 0700 "$data/documents" "$data/tmp"
+for file in "${files[@]}"; do
+    install -d -o root -g root -m 0755 "$app/$(dirname "$file")"
+    install -o root -g root -m 0644 "$tmp/$file" "$app/$file.next"
+    mv "$app/$file.next" "$app/$file"
+done
+# Additive Migration: Tabelle documents; accounts ohne Ein-Admin-Beschränkung, Zugangsdaten bleiben erhalten.
+runuser -u "$name" -- env TRAINING_DATA_DIR="$data" php "$app/bin/manage.php" init
+# Upload-Grenzen nur für diese Anwendung: PHP 50 MB, Nginx 52 MB.
+for setting in 'upload_max_filesize] = 50M' 'post_max_size] = 52M' 'max_input_time] = 300'; do
+    key=${setting%%]*}
+    if grep -q "^php_admin_value\[$key\]" "$pool"; then sed -i "s#^php_admin_value\[$key\].*#php_admin_value[$setting#" "$pool"
+    else echo "php_admin_value[$setting" >> "$pool"; fi
+done
+sed -i 's/client_max_body_size [0-9]*[mk];/client_max_body_size 52m;/' "$site"
+if ! php-fpm8.3 -t 2>/dev/null || ! nginx -t 2>/dev/null; then
+    cp -a "/var/backups/ausbildung-code/$name-pool-before-documents-$stamp.conf" "$pool"
+    cp -a "/var/backups/ausbildung-code/$name-site-before-documents-$stamp.conf" "$site"
+    echo 'Konfigurationsprüfung fehlgeschlagen; Konfiguration zurückgenommen. Code ist aktualisiert, Uploads sind auf 1 MB begrenzt.'; exit 1
+fi
+systemctl reload php8.3-fpm
+systemctl reload nginx
+curl --fail --silent --show-error --resolve "$host:443:127.0.0.1" "https://$host/" -o "$tmp/check.html"
+grep -q 'Admin-Anmeldung' "$tmp/check.html"
+# Ohne Anmeldung darf keine Unterlage ausgeliefert werden, nur die Anmeldeseite.
+curl --fail --silent --show-error --resolve "$host:443:127.0.0.1" "https://$host/?page=document&id=1" -o "$tmp/document.html"
+grep -q 'Admin-Anmeldung' "$tmp/document.html" || { echo 'Dateischutz prüfen!'; exit 1; }
+echo "Unterlagen und weitere Administratoren auf $host eingerichtet. Upload bis 50 MB."
+echo 'Einsatzleiter.app wurde nicht verändert.'

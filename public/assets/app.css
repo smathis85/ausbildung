@@ -30,3 +30,10 @@
   .attendance-person input[type=checkbox] { width: 3mm; height: 3mm; padding: 0; border-radius: 0; }
   .attendance-person input[type=checkbox]:checked:after { font-size: 8pt; line-height: 3mm; }
 }
+
+/* Documents and administrator management */
+.doc-description{display:block;font-weight:400}.danger{background:#fff0ee;color:#9b2c22;border-color:#e8b9b3}.danger:hover{background:#fbdcd7}
+td details form{margin:8px 0}td details{min-width:150px}td>a{display:inline-block;margin-top:6px}
+.documents{list-style:none;margin:0;padding:0}.documents li{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;padding:14px 0;border-bottom:1px solid #e5e9ef}.documents li:last-child{border-bottom:0}.documents .actions{width:auto}
+.setup-code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:22px;letter-spacing:.08em;user-select:all;overflow-wrap:anywhere}h3{font-size:17px;margin:22px 0 10px}
+@media(max-width:700px){.documents .actions{width:100%}.documents .actions .button{flex:1}}

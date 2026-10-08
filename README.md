@@ -12,7 +12,7 @@ Eigenständige PHP-8.3-Anwendung mit SQLite, ohne Laravel-/Einsatzleiter-Abhäng
 
 ## Umfang
 
-- Ein fest erlaubter Admin: sascha.mathis@ffvgs.de. Keine öffentliche Registrierung. Erweiterung auf dem DEV-Featurebranch: Teilnehmer-Leseansicht mit Name und zentralem Code, durch Admin explizit freizuschalten; siehe docs/participant-access.md.
+- Hauptadmin sascha.mathis@ffvgs.de; weitere Admins legt der Hauptadmin unter „Zugang“ an (docs/documents-and-admins.md). Unterlagen-Upload für Teilnehmer siehe ebenda. Keine öffentliche Registrierung. Erweiterung auf dem DEV-Featurebranch: Teilnehmer-Leseansicht mit Name und zentralem Code, durch Admin explizit freizuschalten; siehe docs/participant-access.md.
 - Einrichtung mit privatem, zeitlich begrenztem Einmalcode, anschließend eigenes Passwort. Passwortwechsel und Sitzungsablauf; CSRF, HTTPS, Anmelderatenbegrenzung, parametrisierte SQL-Abfragen, sichere Cookies und Ausgabe-Escaping.
 - Jahrgangsübersicht mit Suche/Feuerwehr-/Statusfilter, Teilnehmerpflege, Archivierung, Termine, mehrere Einheiten je Tag, Anwesenheiten, Einzelhistorie, Druckliste, geschützter CSV-Export und Jahresübernahme.
 - Prüfungsgrenze 12 Teilnahmen, unabhängig von der separat gepflegten bestandenen Prüfung. Keine zusätzliche zweijährige Mindestdauer erfunden. Keine Stunden-/Themenpflichtberechnung ohne entsprechende Daten.

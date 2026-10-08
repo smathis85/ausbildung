@@ -4,6 +4,8 @@ require __DIR__.'/../app/Store.php';
 require __DIR__.'/../app/ParticipantCsv.php';
 require __DIR__.'/../app/ParticipantAccess.php';
 require __DIR__.'/../app/ParticipantOverview.php';
+require __DIR__.'/../app/AdminAccounts.php';
+require __DIR__.'/../app/Documents.php';
 use Ausbildung\Store;
 date_default_timezone_set('Europe/Berlin');
 umask(0077);
@@ -78,26 +80,30 @@ function input(string $label,string $name,mixed $value='',string $type='text',st
     return '<label>'.h($label).'<input type="'.h($type).'" name="'.h($name).'" value="'.h($value).'" '.$extra.'></label>';
 }
 function head(string $title,bool $auth=true): void {
-    echo '<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>'.h($title).' · Ausbildung</title><link rel="manifest" href="/?asset=app-manifest-v1"><link rel="apple-touch-icon" sizes="180x180" href="/?asset=app-icon-180-v1"><link rel="icon" type="image/png" sizes="192x192" href="/?asset=app-icon-192-v1"><meta name="apple-mobile-web-app-title" content="Ausbildung"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="theme-color" content="#142d36"><link rel="stylesheet" href="/assets/app.css?v=print1"><script defer src="/assets/app.js?v=archive1"></script></head><body><header><a class="brand" href="/"><img class="brand-logo" src="/?asset=brand-logo" width="44" height="51" alt="Wappen der Verbandsgemeinde Selters"><span>Ausbildung <small>VG Selters'.(TRAINING_PRODUCTION?'':' · DEV').'</small></span></a>';
-    if($auth) echo '<nav aria-label="Hauptnavigation"><a href="/">Übersicht</a><a href="/?page=lessons">Termine</a><a href="/?page=import">Importprüfung</a><a href="/?page=account">Zugang</a><form method="post">'.csrf().'<input type="hidden" name="action" value="logout"><button class="subtle">Abmelden</button></form></nav>';
+    echo '<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>'.h($title).' · Ausbildung</title><link rel="manifest" href="/?asset=app-manifest-v1"><link rel="apple-touch-icon" sizes="180x180" href="/?asset=app-icon-180-v1"><link rel="icon" type="image/png" sizes="192x192" href="/?asset=app-icon-192-v1"><meta name="apple-mobile-web-app-title" content="Ausbildung"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="theme-color" content="#142d36"><link rel="stylesheet" href="/assets/app.css?v=docs1"><script defer src="/assets/app.js?v=docs1"></script></head><body><header><a class="brand" href="/"><img class="brand-logo" src="/?asset=brand-logo" width="44" height="51" alt="Wappen der Verbandsgemeinde Selters"><span>Ausbildung <small>VG Selters'.(TRAINING_PRODUCTION?'':' · DEV').'</small></span></a>';
+    if($auth) echo '<nav aria-label="Hauptnavigation"><a href="/">Übersicht</a><a href="/?page=lessons">Termine</a><a href="/?page=documents">Unterlagen</a><a href="/?page=import">Importprüfung</a><a href="/?page=account">Zugang</a><form method="post">'.csrf().'<input type="hidden" name="action" value="logout"><button class="subtle">Abmelden</button></form></nav>';
     echo '</header><main><h1>'.h($title).'</h1>';
     if(isset($_SESSION['flash'])) { echo '<p class="notice" role="status">'.h($_SESSION['flash']).'</p>'; unset($_SESSION['flash']); }
 }
 function foot(): void { echo '</main><footer>Eigenständige Ausbildungsverwaltung'.(TRAINING_PRODUCTION?'':' · Testumgebung').'</footer></body></html>'; }
 try {
     $s=new Store($dataDir.'/training.sqlite');
-    $account=$s->one('SELECT * FROM accounts WHERE id=1');
-    if(!$account) throw new RuntimeException('Ersteinrichtung fehlt.');
+    if(!$s->one('SELECT id FROM accounts LIMIT 1')) throw new RuntimeException('Ersteinrichtung fehlt.');
 } catch(Throwable $e) { http_response_code(503); exit('Ausbildungsverwaltung wird vorbereitet. Bitte später erneut versuchen.'); }
 $page=is_string($_GET['page']??null)?$_GET['page']:'dashboard';
-$auth=isset($_SESSION['uid']) && (int)$_SESSION['uid']===1 && ($_SESSION['version']??null)===(int)$account['version'] && time()-($_SESSION['seen']??0)<7200 && time()-($_SESSION['created']??0)<43200;
-if($auth) $_SESSION['seen']=time(); else unset($_SESSION['uid']);
+$admins=new Ausbildung\AdminAccounts($s);
+$documents=new Ausbildung\Documents($s,$dataDir.'/documents');
+$account=is_int($_SESSION['uid']??null)?$admins->byId($_SESSION['uid']):null;
+$auth=$account!==null && $account['password_hash']!==null && ($_SESSION['version']??null)===(int)$account['version'] && time()-($_SESSION['seen']??0)<7200 && time()-($_SESSION['created']??0)<43200;
+if($auth) $_SESSION['seen']=time(); else { unset($_SESSION['uid']); $account=null; }
+$isPrimaryAdmin=$auth&&(int)$account['id']===Ausbildung\AdminAccounts::PRIMARY_ID;
 $access=new Ausbildung\ParticipantAccess($s);
 $participantAuth=!$auth&&isset($_SESSION['participant_id'])&&time()-($_SESSION['seen']??0)<3600&&time()-($_SESSION['created']??0)<28800&&$access->sessionValid((int)$_SESSION['participant_id'],(int)($_SESSION['participant_version']??0));
 if($participantAuth)$_SESSION['seen']=time();else unset($_SESSION['participant_id']);
 $error=null;
 if($_SERVER['REQUEST_METHOD']==='POST') {
     try {
+        if(!$_POST&&(int)($_SERVER['CONTENT_LENGTH']??0)>0){ http_response_code(413); throw new RuntimeException('Die Datei ist zu groß (höchstens '.Ausbildung\Documents::size(Ausbildung\Documents::MAX_BYTES).').'); }
         if(!is_string($_POST['csrf']??null)||!hash_equals($_SESSION['csrf'],$_POST['csrf'])) { http_response_code(403); throw new RuntimeException('Die Sitzung ist abgelaufen. Bitte Seite neu laden.'); }
         $action=field('action','',40);
         if($action==='participant_login'){
@@ -127,20 +133,23 @@ if($_SERVER['REQUEST_METHOD']==='POST') {
                 $s->run('INSERT INTO rate_limits(key,attempts,started) VALUES(?,1,?) ON CONFLICT(key) DO UPDATE SET attempts=attempts+1',[$key,time()]);
             });
             $email=strtolower(field('email','',254)); $password=field('password','',256);
+            $candidate=$admins->byEmail($email);
             if($action==='setup') {
                 $code=field('setup_code','',100);
-                if($email!==$account['email']||$account['password_hash']||!$account['setup_hash']||$account['setup_expires']<time()||!hash_equals($account['setup_hash'],hash('sha256',$code))) throw new RuntimeException('Einrichtungscode oder Zugangsdaten ungültig.');
+                if(!$candidate||$candidate['password_hash']||!$candidate['setup_hash']||$candidate['setup_expires']<time()||!Ausbildung\AdminAccounts::setupCodeMatches($candidate['setup_hash'],$code)) throw new RuntimeException('Einrichtungscode oder Zugangsdaten ungültig.');
                 if(mb_strlen($password)<12 || $password!==field('password_confirmation','',256)) throw new RuntimeException('Mindestens 12 Zeichen verwenden und Passwort identisch bestätigen.');
-                $s->transaction(function() use($s,$password,$account){
-                    if(!$s->run('UPDATE accounts SET password_hash=?,setup_hash=NULL,setup_expires=NULL WHERE id=1 AND password_hash IS NULL AND setup_hash=?',[password_hash($password,PASSWORD_DEFAULT),$account['setup_hash']])) throw new RuntimeException('Zugang bereits eingerichtet.');
-                    $s->audit('access_activated');
+                $s->transaction(function() use($s,$password,$candidate){
+                    if(!$s->run('UPDATE accounts SET password_hash=?,setup_hash=NULL,setup_expires=NULL WHERE id=? AND password_hash IS NULL AND setup_hash=?',[password_hash($password,PASSWORD_DEFAULT),$candidate['id'],$candidate['setup_hash']])) throw new RuntimeException('Zugang bereits eingerichtet.');
+                    $s->audit('access_activated','account',(int)$candidate['id']);
                 });
-                if(is_file($dataDir.'/setup-code.txt')) unlink($dataDir.'/setup-code.txt');
-            } elseif($email!==$account['email']||!$account['password_hash']||!password_verify($password,$account['password_hash'])) {
+                if((int)$candidate['id']===Ausbildung\AdminAccounts::PRIMARY_ID&&is_file($dataDir.'/setup-code.txt')) unlink($dataDir.'/setup-code.txt');
+            } elseif(!$candidate||!$candidate['password_hash']||!password_verify($password,$candidate['password_hash'])) {
+                if(!$candidate||!$candidate['password_hash'])password_hash($password,PASSWORD_DEFAULT); // similar timing for unknown addresses
                 throw new RuntimeException('Anmeldung nicht möglich. Bitte Zugangsdaten prüfen.');
             }
             $s->run('DELETE FROM rate_limits WHERE key=?',[$key]);
-            session_regenerate_id(true); $_SESSION=['uid'=>1,'version'=>(int)$account['version'],'seen'=>time(),'created'=>time(),'csrf'=>bin2hex(random_bytes(32))]; go('/');
+            $account=$candidate;
+            session_regenerate_id(true); $_SESSION=['uid'=>(int)$account['id'],'version'=>(int)$account['version'],'seen'=>time(),'created'=>time(),'csrf'=>bin2hex(random_bytes(32))]; go('/');
         }
         if(!$auth) { http_response_code($participantAuth?403:401); throw new RuntimeException('Dieser Vorgang ist nur für die Ausbildungsverwaltung erlaubt.'); }
         require __DIR__.'/../app/csv-actions.php';
@@ -148,12 +157,39 @@ if($_SERVER['REQUEST_METHOD']==='POST') {
             $access->configure(isset($_POST['enabled']),field('access_code','',128),number('access_version',1,PHP_INT_MAX));
             $_SESSION['flash']='Teilnehmerzugang gespeichert. Bestehende Teilnehmeranmeldungen wurden beendet.';go('/?page=account');
         }
+        if($action==='admin_create'){
+            $email=field('email','',254);
+            $_SESSION['admin_code']=['email'=>strtolower($email),'code'=>$admins->create((int)$account['id'],$email,field('name','',100))];
+            go('/?page=account#admins');
+        }
+        if($action==='admin_reset'||$action==='admin_remove'){
+            $target=$admins->byId(number('id',1,PHP_INT_MAX));
+            if(!$target)throw new RuntimeException('Administrator nicht gefunden.');
+            if($action==='admin_reset')$_SESSION['admin_code']=['email'=>$target['email'],'code'=>$admins->resetSetup((int)$account['id'],(int)$target['id'])];
+            else{$admins->remove((int)$account['id'],(int)$target['id']);$_SESSION['flash']='Administrator '.$target['email'].' entfernt.';}
+            go('/?page=account#admins');
+        }
+        if($action==='document_upload'){
+            $page='documents';
+            $documents->add($_FILES['document']??null,field('title','',200),field('description','',1000),isset($_POST['visible']),(int)$account['id']);
+            $_SESSION['flash']='Unterlage hochgeladen.';go('/?page=documents');
+        }
+        if($action==='document_update'){
+            $page='documents';
+            $documents->update(number('id',1,PHP_INT_MAX),number('version',1,PHP_INT_MAX),field('title','',200),field('description','',1000),isset($_POST['visible']));
+            $_SESSION['flash']='Unterlage gespeichert.';go('/?page=documents');
+        }
+        if($action==='document_delete'){
+            $page='documents';
+            $documents->delete(number('id',1,PHP_INT_MAX));
+            $_SESSION['flash']='Unterlage gelöscht.';go('/?page=documents');
+        }
         if($action==='logout') { $_SESSION=[]; session_destroy(); setcookie(session_name(),'', ['expires'=>1,'path'=>'/','secure'=>!$local,'httponly'=>true,'samesite'=>'Strict']); go('/'); }
         if($action==='password') {
             if(!password_verify(field('current_password','',256),$account['password_hash'])) throw new RuntimeException('Aktuelles Passwort nicht korrekt.');
             $password=field('password','',256);
             if(mb_strlen($password)<12||$password!==field('password_confirmation','',256)) throw new RuntimeException('Mindestens 12 Zeichen verwenden und Passwort identisch bestätigen.');
-            $s->transaction(function()use($s,$password){$s->run('UPDATE accounts SET password_hash=?,version=version+1 WHERE id=1',[password_hash($password,PASSWORD_DEFAULT)]);$s->audit('password_changed');});
+            $s->transaction(function()use($s,$password,$account){$s->run('UPDATE accounts SET password_hash=?,version=version+1 WHERE id=?',[password_hash($password,PASSWORD_DEFAULT),$account['id']]);$s->audit('password_changed','account',(int)$account['id']);});
             $_SESSION=[]; session_regenerate_id(true); go('/');
         }
         if($action==='attendance') {
@@ -215,9 +251,15 @@ if($_SERVER['REQUEST_METHOD']==='POST') {
     catch(RuntimeException $e) { $error=$e->getMessage(); }
     catch(Throwable $e) { http_response_code(500);$error='Speichern nicht möglich. Es wurden keine unvollständigen Änderungen übernommen.'; }
 }
+if($page==='document'&&($auth||$participantAuth)&&$_SERVER['REQUEST_METHOD']!=='POST'){
+    $doc=$documents->find(filter_var($_GET['id']??0,FILTER_VALIDATE_INT)?:0);
+    // Participants only see released documents; hidden ones answer like missing ones.
+    if(!$doc||(!$auth&&!(int)$doc['visible'])){http_response_code(404);head('Unterlage nicht gefunden',$auth);echo '<p>Diese Unterlage gibt es nicht (mehr).</p><a href="/?page='.($auth?'documents':'me').'">Zurück</a>';foot();exit;}
+    $documents->send($doc,isset($_GET['download']));
+}
 require __DIR__.'/../app/participant-pages.php';
 if(!$auth) {
-    $setup=$page==='setup'&&!$account['password_hash']; head($setup?'Zugang einrichten':'Willkommen',false);
+    $setup=$page==='setup'&&$admins->pendingSetup(); head($setup?'Zugang einrichten':'Willkommen',false);
     if(!$setup)echo '<section class="card auth"><h2>Meine Teilnahmen</h2><p>Für Kameradinnen und Kameraden: mit Name und gemeinsamem Ausbildungscode anmelden.</p><a class="button" href="/?page=participant-login">Zur Teilnehmeranmeldung</a></section>';
     echo '<section class="auth card"><h2>'.($setup?'Dein persönlicher Zugang':'Admin-Anmeldung').'</h2><p>Geschützter Bereich für die Ausbildung der Feuerwehr VG Selters.</p>';
     if($error)echo '<p class="error" role="alert">'.h($error).'</p>';
@@ -226,7 +268,7 @@ if(!$auth) {
     echo input($setup?'Passwort festlegen (mindestens 12 Zeichen)':'Passwort','password','','password','required autocomplete="'.($setup?'new-password':'current-password').'"');
     if($setup) echo input('Passwort wiederholen','password_confirmation','','password','required autocomplete="new-password"');
     echo '<button>'.($setup?'Zugang aktivieren':'Anmelden').'</button></form>';
-    if(!$account['password_hash']&&!$setup)echo '<p><a href="/?page=setup">Ersteinrichtung mit Einrichtungscode</a></p>';
+    if(!$setup&&$admins->pendingSetup())echo '<p><a href="/?page=setup">Admin-Zugang mit Einrichtungscode aktivieren</a></p>';
     echo '</section>';foot();exit;
 }
 $years=array_map('intval',array_column($s->rows('SELECT DISTINCT year FROM enrollments UNION SELECT DISTINCT year FROM lessons ORDER BY year DESC'),'year'));
@@ -236,7 +278,7 @@ if($page==='csv-template'){
     header('Content-Type: text/csv; charset=UTF-8');header('Content-Disposition: attachment; filename=teilnehmer-vorlage.csv');
     echo "\xEF\xBB\xBFVorname;Nachname;Feuerwehr;Ausbildungsbeginn;Lehrgang\r\n";exit;
 }
-$titles=['csv-import'=>'Teilnehmer importieren','dashboard'=>'Ausbildungsübersicht','person'=>'Teilnehmer','lessons'=>'Termine & Anwesenheiten','lesson'=>'Anwesenheit erfassen','import'=>'Importprüfung','account'=>'Dein Zugang'];
+$titles=['csv-import'=>'Teilnehmer importieren','dashboard'=>'Ausbildungsübersicht','person'=>'Teilnehmer','lessons'=>'Termine & Anwesenheiten','lesson'=>'Anwesenheit erfassen','import'=>'Importprüfung','account'=>'Dein Zugang','documents'=>'Unterlagen'];
 if(!isset($titles[$page])&&$page!=='export') { http_response_code(404);$page='dashboard'; }
 if($page==='export') {
     header('Content-Type: text/csv; charset=UTF-8');header('Content-Disposition: attachment; filename="ausbildung-'.$year.'.csv"');
@@ -252,6 +294,7 @@ if(in_array($page,['dashboard','lessons'],true)) {
     echo '</select></label><button class="secondary">Jahr anzeigen</button></form>';
 }
 if($page==='csv-import')require __DIR__.'/../app/csv-page.php';
+if($page==='documents')require __DIR__.'/../app/documents-page.php';
 if($page==='dashboard') {
     $people=$s->participants($year);$active=array_filter($people,fn($p)=>!$p['archived']);$ready=count(array_filter($active,fn($p)=>$p['total']>=10&&!$p['exam_date']&&!$p['exam_label']));
     $passed=count(array_filter($people,fn($p)=>$p['exam_date']||$p['exam_label']));
@@ -310,6 +353,7 @@ if($page==='import') {
 if($page==='account'){
     $c=$access->settings();
     echo '<section class="card"><h2>Zentraler Ausbildungscode</h2><p>Ein gemeinsamer Code für alle Teilnehmer. Wer den Code kennt, kann durch Eingabe eines anderen Namens auch dessen Übersicht aufrufen. Schreibzugriff und interne Bemerkungen bleiben der Verwaltung vorbehalten.</p><p>Status: <strong>'.($c['enabled']?'Freigeschaltet':'Gesperrt').'</strong></p><form method="post">'.csrf().'<input type="hidden" name="action" value="participant_access"><input type="hidden" name="access_version" value="'.$c['version'].'">'.input($c['code_hash']?'Neuer Code (leer lassen, um den bestehenden zu behalten)':'Ausbildungscode festlegen','access_code','','password','minlength="8" maxlength="128" autocomplete="new-password"').'<p class="muted">Mindestens 8 Zeichen. Der Code wird geschützt gespeichert und nicht wieder angezeigt. Eine Änderung oder Sperrung beendet bestehende Teilnehmeranmeldungen.</p><label class="check"><input type="checkbox" name="enabled" '.($c['enabled']?'checked':'').'> Teilnehmerzugang freischalten</label><button>Teilnehmerzugang speichern</button></form><p><a href="/?page=participant-login">Teilnehmeranmeldung</a> (zum Testen zuerst abmelden oder ein privates Browserfenster verwenden)</p></section>';
+    require __DIR__.'/../app/admins-page.php';
     echo '<section class="card auth"><h2>Passwort ändern</h2><p>'.h($account['email']).'</p><p>Der Zugang ist von Einsatzleiter.app unabhängig. Ein Passwortwechsel gilt ausschließlich hier.</p><form method="post">'.csrf().'<input type="hidden" name="action" value="password">'.input('Aktuelles Passwort','current_password','','password','required autocomplete="current-password"').input('Neues Passwort (mindestens 12 Zeichen)','password','','password','required minlength="12" autocomplete="new-password"').input('Neues Passwort wiederholen','password_confirmation','','password','required autocomplete="new-password"').'<button>Passwort ändern und abmelden</button></form></section>';
 }
 foot();
