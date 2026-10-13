@@ -84,3 +84,18 @@ td details form{margin:8px 0}td details{min-width:150px}td>a{display:inline-bloc
   .schedule-table td:nth-child(4),.schedule-table td:nth-child(5){white-space:nowrap}
 }
 @page{@bottom-right{content:"Seite " counter(page);font-size:9pt}}
+/* Terminbuchung und Einstellungen (Oktober 2026) */
+.tabs{display:flex;gap:6px;flex-wrap:wrap;border-bottom:1px solid #d5dce4;margin:18px 0 6px}.tabs a{padding:9px 14px;text-decoration:none;border-radius:8px 8px 0 0;color:#185661;font-weight:600}.tabs a[aria-current=page]{background:white;border:1px solid #d5dce4;border-bottom-color:white;margin-bottom:-1px;color:#172238}
+.hp{position:absolute!important;left:-10000px;top:auto;width:1px;height:1px;overflow:hidden}
+.badge.cancelled{background:#fff0ee;color:#9b2c22}
+.pre{white-space:pre-line}
+.facts{display:grid;grid-template-columns:max-content 1fr;gap:4px 16px;margin:0}.facts dt{color:#59677b}.facts dd{margin:0;overflow-wrap:anywhere}
+.booking-list{list-style:none;padding:0;margin:0}.booking-list li{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap}.booking-list h2{margin:0}.booking-list p{margin:4px 0 0}
+.booking-list li>div:last-child{display:flex;align-items:center;gap:12px}
+form.inline{display:flex;align-items:center;gap:8px;margin:6px 0 0;flex-wrap:wrap}form.inline .check{margin:0;font-weight:400}
+.subtle-link{background:none;border:none;color:#9b2c22;padding:4px 0;min-height:0;text-decoration:underline}.subtle-link:hover{background:none;color:#6e1f18}
+.muted-row td{color:#8692a3}
+.print-only{display:none}
+@media print{.print-only{display:table-cell!important}.booking-table .print-skip{display:none}.booking-table .sign-cell{width:45mm;border-bottom:.5pt solid #999}.tabs{display:none}}
+@media (max-width:640px){.booking-list li>div:last-child{width:100%;justify-content:space-between}}
+[hidden]{display:none!important}

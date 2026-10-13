@@ -9,11 +9,12 @@ final class Store
     public PDO $db;
     public int $normalizedDepartments=0;
     public int $duplicateNamesAfterNormalization=0;
+    public const KNOWN_DEPARTMENTS=['Freilingen','Freirachdorf','Goddert','Hartenfels','Herschbach',
+        'Krümmel-Sessenhausen','Marienrachdorf','Maroth','Maxsain','Nordhofen',
+        'Quirnbach','Rückeroth','Schenkelberg','Selters','Weidenhahn','Wölferlingen'];
     public static function canonicalDepartment(string $value): string {
         $value=trim(preg_replace('/\s+/u',' ',$value));
-        $known=['Freilingen','Freirachdorf','Goddert','Hartenfels','Herschbach',
-            'Krümmel-Sessenhausen','Marienrachdorf','Maroth','Maxsain','Nordhofen',
-            'Quirnbach','Rückeroth','Schenkelberg','Selters','Weidenhahn','Wölferlingen'];
+        $known=self::KNOWN_DEPARTMENTS;
         $withoutPrefix=preg_replace('/^ff\s+/iu','',$value);
         if(mb_strtolower($withoutPrefix)==='freiligen')return 'Freilingen';
         foreach($known as $name)if(mb_strtolower($withoutPrefix)===mb_strtolower($name))return $name;
@@ -39,6 +40,15 @@ CREATE TABLE IF NOT EXISTS schedule_entries(id INTEGER PRIMARY KEY,year INTEGER 
 CREATE INDEX IF NOT EXISTS schedule_entries_year ON schedule_entries(year,date);
 CREATE TABLE IF NOT EXISTS schedule_years(year INTEGER PRIMARY KEY,title TEXT NOT NULL,subtitle TEXT NOT NULL DEFAULT '',footer TEXT NOT NULL DEFAULT '',published INTEGER NOT NULL DEFAULT 1 CHECK(published IN (0,1)),version INTEGER NOT NULL DEFAULT 1);
 CREATE TABLE IF NOT EXISTS documents(id INTEGER PRIMARY KEY,title TEXT NOT NULL,description TEXT NOT NULL DEFAULT '',original_name TEXT NOT NULL,stored_name TEXT NOT NULL UNIQUE,extension TEXT NOT NULL,size INTEGER NOT NULL,sha256 TEXT NOT NULL,visible INTEGER NOT NULL DEFAULT 1 CHECK(visible IN (0,1)),uploaded_by INTEGER,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,version INTEGER NOT NULL DEFAULT 1);
+CREATE TABLE IF NOT EXISTS app_settings(key TEXT PRIMARY KEY,value TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS booking_events(id INTEGER PRIMARY KEY,title TEXT NOT NULL,description TEXT NOT NULL DEFAULT '',location TEXT NOT NULL DEFAULT '',starts_at TEXT NOT NULL,ends_at TEXT,capacity INTEGER NOT NULL CHECK(capacity BETWEEN 1 AND 1000),visible INTEGER NOT NULL DEFAULT 1 CHECK(visible IN (0,1)),code_hash TEXT,cancelled INTEGER NOT NULL DEFAULT 0 CHECK(cancelled IN (0,1)),version INTEGER NOT NULL DEFAULT 1,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE INDEX IF NOT EXISTS booking_events_start ON booking_events(starts_at);
+CREATE TABLE IF NOT EXISTS bookings(id INTEGER PRIMARY KEY,event_id INTEGER NOT NULL REFERENCES booking_events(id),name TEXT NOT NULL,department TEXT NOT NULL,email TEXT NOT NULL,email_norm TEXT NOT NULL,status TEXT NOT NULL CHECK(status IN ('pending','confirmed','cancelled')),token_hash TEXT NOT NULL UNIQUE,created_at INTEGER NOT NULL,confirmed_at INTEGER,cancelled_at INTEGER,cancel_reason TEXT NOT NULL DEFAULT '',expires_at INTEGER,source TEXT NOT NULL DEFAULT 'public',version INTEGER NOT NULL DEFAULT 1);
+CREATE INDEX IF NOT EXISTS bookings_event ON bookings(event_id,status);
+CREATE INDEX IF NOT EXISTS bookings_email ON bookings(email_norm,status);
+CREATE TABLE IF NOT EXISTS booking_rate(key TEXT PRIMARY KEY,attempts INTEGER NOT NULL,started INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS mail_outbox(id INTEGER PRIMARY KEY,recipient TEXT NOT NULL,subject TEXT NOT NULL,body TEXT NOT NULL,ics TEXT,kind TEXT NOT NULL DEFAULT '',status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','sending','sent','failed')),attempts INTEGER NOT NULL DEFAULT 0,next_try INTEGER NOT NULL,claimed_at INTEGER,sent_at INTEGER,last_error TEXT NOT NULL DEFAULT '',created_at INTEGER NOT NULL);
+CREATE INDEX IF NOT EXISTS mail_outbox_due ON mail_outbox(status,next_try);
 SQL);
         $this->transaction(function() {
             // Until 10/2026 only one administrator (id=1) was allowed. Rebuild once, keeping all credentials.

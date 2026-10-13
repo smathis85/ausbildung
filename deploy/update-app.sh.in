@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Code-Update der Ausbildungsverwaltung (ab Terminplan, Oktober 2026). Aufruf: sudo bash update.sh dev|prod
+# Code-Update der Ausbildungsverwaltung (ab Terminplan, Oktober 2026; seit Terminbuchung mit Mail-Cron). Aufruf: sudo bash update.sh dev|prod
 set -euo pipefail
 umask 077
 [[ $(id -u) == 0 ]] || { echo 'Bitte mit sudo ausführen.'; exit 1; }
@@ -40,6 +40,10 @@ for file in "${files[@]}"; do
 done
 # Additive Migration (neue Tabellen/Spalten), bestehende Daten bleiben erhalten.
 runuser -u "$name" -- env TRAINING_DATA_DIR="$data" php "$app/bin/manage.php" init
+# E-Mail-Warteschlange der Terminbuchung (alle 5 Minuten, eigener Systembenutzer).
+cron=/etc/cron.d/$name-mail
+printf '# %s\nSHELL=/bin/sh\nPATH=/usr/bin:/bin\n*/5 * * * * %s env TRAINING_DATA_DIR=%s /usr/bin/php %s/bin/mail-queue.php >> %s/mail-queue.log 2>&1\n' "$marker" "$name" "$data" "$app" "$data" > "$cron.next"
+chmod 0644 "$cron.next" && mv "$cron.next" "$cron"
 if [[ -n "$schedule_sha" ]]; then
     # Importiert nur in ein Jahr ohne Terminplan; vorhandene Termine und Anwesenheiten bleiben erhalten.
     install -o "$name" -g "$name" -m 0600 "$stage/terminplan.json" "$tmp/terminplan.json"
@@ -52,5 +56,10 @@ grep -q 'Admin-Anmeldung' "$tmp/check.html"
 # Ohne Anmeldung kein Terminplan, nur die Anmeldeseite.
 curl --fail --silent --show-error --resolve "$host:443:127.0.0.1" "https://$host/?page=schedule" -o "$tmp/schedule.html"
 grep -q 'Admin-Anmeldung' "$tmp/schedule.html" || { echo 'Zugriffsschutz prüfen!'; exit 1; }
-echo "Update auf $host eingespielt (Terminplan). Sicherung: /var/backups/ausbildung-code/$name-before-update-$stamp.tar.gz"
+# Öffentliche Buchungsseite antwortet, Verwaltung der Buchungen nur mit Anmeldung.
+curl --fail --silent --show-error --resolve "$host:443:127.0.0.1" "https://$host/?page=termine" -o "$tmp/termine.html"
+grep -q 'Termine buchen' "$tmp/termine.html" || { echo 'Buchungsseite prüfen!'; exit 1; }
+curl --fail --silent --show-error --resolve "$host:443:127.0.0.1" "https://$host/?page=bookings" -o "$tmp/bookings.html"
+grep -q 'Admin-Anmeldung' "$tmp/bookings.html" || { echo 'Zugriffsschutz prüfen!'; exit 1; }
+echo "Update auf $host eingespielt. Sicherung: /var/backups/ausbildung-code/$name-before-update-$stamp.tar.gz"
 echo 'Einsatzleiter.app wurde nicht verändert.'
