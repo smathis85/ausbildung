@@ -8,3 +8,6 @@ for(const input of document.querySelectorAll('input[type=file][data-max-bytes]')
 // Terminplan: switching between Saturday and weekday adjusts an untouched default time.
 const planDate=document.querySelector('.schedule-form input[name=date]'),planTime=document.querySelector('.schedule-form textarea[name=time_text]');
 if(planDate&&planTime)planDate.addEventListener('change',()=>{if(!planDate.value)return;const saturday=new Date(planDate.value+'T12:00:00').getDay()===6,defaults=[planTime.dataset.weekday,planTime.dataset.saturday];if(planTime.value.trim()===''||defaults.includes(planTime.value.replace(/\r/g,'')))planTime.value=saturday?planTime.dataset.saturday:planTime.dataset.weekday;});
+// Terminbuchung: the free-text field for another fire brigade is only needed for "Andere Feuerwehr".
+const bookingDepartment=document.querySelector('.booking-form select[name=department]'),bookingOther=document.querySelector('.booking-form input.department-other');
+if(bookingDepartment&&bookingOther){const label=bookingOther.closest('label'),sync=()=>{const other=bookingDepartment.value==='__other';label.hidden=!other;bookingOther.required=other;};bookingDepartment.addEventListener('change',sync);sync();}

@@ -8,12 +8,19 @@ require __DIR__.'/../app/AdminAccounts.php';
 require __DIR__.'/../app/Documents.php';
 require __DIR__.'/../app/Schedule.php';
 require __DIR__.'/../app/schedule-view.php';
+require __DIR__.'/../app/Settings.php';
+require __DIR__.'/../app/Mailer.php';
+require __DIR__.'/../app/Bookings.php';
+require __DIR__.'/../app/BookingMail.php';
+require __DIR__.'/../app/booking-functions.php';
 use Ausbildung\Store;
 date_default_timezone_set('Europe/Berlin');
 umask(0077);
 $dataDir=getenv('TRAINING_DATA_DIR')?:__DIR__.'/../private';
 $local=getenv('TRAINING_LOCAL_TEST')==='1';
 define('TRAINING_PRODUCTION',getenv('TRAINING_ENV')==='production');
+// Fixed public address for links in e-mails; never taken from the Host header outside local tests.
+define('TRAINING_BASE_URL',$local?'http://'.preg_replace('/[^A-Za-z0-9.:\[\]-]/','',$_SERVER['HTTP_HOST']??'127.0.0.1'):(TRAINING_PRODUCTION?'https://ausbildung.einsatzleiter.app':'https://ausbildung-dev.einsatzleiter.app'));
 if(!$local && ($_SERVER['HTTPS']??'')!=='on') { http_response_code(400); exit('HTTPS erforderlich.'); }
 header("Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
 header('X-Content-Type-Options: nosniff'); header('Referrer-Policy: no-referrer'); header('X-Frame-Options: DENY');
@@ -83,7 +90,7 @@ function input(string $label,string $name,mixed $value='',string $type='text',st
 }
 function head(string $title,bool $auth=true): void {
     echo '<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>'.h($title).' · Ausbildung</title><link rel="manifest" href="/?asset=app-manifest-v1"><link rel="apple-touch-icon" sizes="180x180" href="/?asset=app-icon-180-v1"><link rel="icon" type="image/png" sizes="192x192" href="/?asset=app-icon-192-v1"><meta name="apple-mobile-web-app-title" content="Ausbildung"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="theme-color" content="#142d36"><link rel="stylesheet" href="/assets/app.css?v=plan1"><script defer src="/assets/app.js?v=plan1"></script></head><body><header><a class="brand" href="/"><img class="brand-logo" src="/?asset=brand-logo" width="44" height="51" alt="Wappen der Verbandsgemeinde Selters"><span>Ausbildung <small>VG Selters'.(TRAINING_PRODUCTION?'':' · DEV').'</small></span></a>';
-    if($auth) echo '<nav aria-label="Hauptnavigation"><a href="/">Übersicht</a><a href="/?page=schedule">Terminplan</a><a href="/?page=lessons">Termine</a><a href="/?page=documents">Unterlagen</a><a href="/?page=import">Importprüfung</a><a href="/?page=account">Zugang</a><form method="post">'.csrf().'<input type="hidden" name="action" value="logout"><button class="subtle">Abmelden</button></form></nav>';
+    if($auth) echo '<nav aria-label="Hauptnavigation"><a href="/">Übersicht</a><a href="/?page=schedule">Terminplan</a><a href="/?page=lessons">Termine</a><a href="/?page=bookings">Buchungen</a><a href="/?page=settings">Einstellungen</a><form method="post">'.csrf().'<input type="hidden" name="action" value="logout"><button class="subtle">Abmelden</button></form></nav>';
     echo '</header><main><h1>'.h($title).'</h1>';
     if(isset($_SESSION['flash'])) { echo '<p class="notice" role="status">'.h($_SESSION['flash']).'</p>'; unset($_SESSION['flash']); }
 }
@@ -96,6 +103,18 @@ $page=is_string($_GET['page']??null)?$_GET['page']:'dashboard';
 $admins=new Ausbildung\AdminAccounts($s);
 $documents=new Ausbildung\Documents($s,$dataDir.'/documents');
 $schedule=new Ausbildung\Schedule($s);
+$appSettings=new Ausbildung\Settings($s);
+$mailer=new Ausbildung\Mailer($s,$appSettings,$dataDir.'/mail.key');
+$bookings=new Ausbildung\Bookings($s,$appSettings);
+$bookingMail=new Ausbildung\BookingMail($mailer,$appSettings,$bookings,TRAINING_BASE_URL);
+// Mails queued during this request are sent after the response; bin/mail-queue.php retries the rest.
+register_shutdown_function(function()use($mailer){
+    if(!$mailer->queued)return;
+    // Save the session first, otherwise the redirected next request waits for the session lock.
+    if(session_status()===PHP_SESSION_ACTIVE)session_write_close();
+    if(function_exists('fastcgi_finish_request'))fastcgi_finish_request();
+    try{$mailer->flush(10);}catch(Throwable){}
+});
 $account=is_int($_SESSION['uid']??null)?$admins->byId($_SESSION['uid']):null;
 $auth=$account!==null && $account['password_hash']!==null && ($_SESSION['version']??null)===(int)$account['version'] && time()-($_SESSION['seen']??0)<7200 && time()-($_SESSION['created']??0)<43200;
 if($auth) $_SESSION['seen']=time(); else { unset($_SESSION['uid']); $account=null; }
@@ -127,6 +146,7 @@ if($_SERVER['REQUEST_METHOD']==='POST') {
         if($action==='participant_logout'){
             $_SESSION=[];session_destroy();setcookie(session_name(),'', ['expires'=>1,'path'=>'/','secure'=>!$local,'httponly'=>true,'samesite'=>'Strict']);go('/?page=participant-login');
         }
+        require __DIR__.'/../app/booking-public-actions.php';
         if(in_array($action,['login','setup'],true)) {
             $key=hash('sha256',($_SERVER['REMOTE_ADDR']??'unknown'));
             $s->transaction(function()use($s,$key){
@@ -157,6 +177,7 @@ if($_SERVER['REQUEST_METHOD']==='POST') {
         if(!$auth) { http_response_code($participantAuth?403:401); throw new RuntimeException('Dieser Vorgang ist nur für die Ausbildungsverwaltung erlaubt.'); }
         require __DIR__.'/../app/csv-actions.php';
         require __DIR__.'/../app/schedule-actions.php';
+        require __DIR__.'/../app/booking-actions.php';
         if($action==='participant_access'){
             $access->configure(isset($_POST['enabled']),field('access_code','',128),number('access_version',1,PHP_INT_MAX));
             $_SESSION['flash']='Teilnehmerzugang gespeichert. Bestehende Teilnehmeranmeldungen wurden beendet.';go('/?page=account');
@@ -262,9 +283,11 @@ if($page==='document'&&($auth||$participantAuth)&&$_SERVER['REQUEST_METHOD']!=='
     if(!$doc||(!$auth&&!(int)$doc['visible'])){http_response_code(404);head('Unterlage nicht gefunden',$auth);echo '<p>Diese Unterlage gibt es nicht (mehr).</p><a href="/?page='.($auth?'documents':'me').'">Zurück</a>';foot();exit;}
     $documents->send($doc,isset($_GET['download']));
 }
+require __DIR__.'/../app/booking-public.php';
 require __DIR__.'/../app/participant-pages.php';
 if(!$auth) {
     $setup=$page==='setup'&&$admins->pendingSetup(); head($setup?'Zugang einrichten':'Willkommen',false);
+    if(!$setup&&$appSettings->on('booking_enabled'))echo '<section class="card auth"><h2>Termine buchen</h2><p>Für alle: freie Plätze bei Ausbildungsterminen buchen, ohne Konto.</p><a class="button" href="/?page=termine">Zu den Terminen</a></section>';
     if(!$setup)echo '<section class="card auth"><h2>Meine Teilnahmen</h2><p>Für Kameradinnen und Kameraden: mit Name und gemeinsamem Ausbildungscode anmelden.</p><a class="button" href="/?page=participant-login">Zur Teilnehmeranmeldung</a></section>';
     echo '<section class="auth card"><h2>'.($setup?'Dein persönlicher Zugang':'Admin-Anmeldung').'</h2><p>Geschützter Bereich für die Ausbildung der Feuerwehr VG Selters.</p>';
     if($error)echo '<p class="error" role="alert">'.h($error).'</p>';
@@ -283,8 +306,15 @@ if($page==='csv-template'){
     header('Content-Type: text/csv; charset=UTF-8');header('Content-Disposition: attachment; filename=teilnehmer-vorlage.csv');
     echo "\xEF\xBB\xBFVorname;Nachname;Feuerwehr;Ausbildungsbeginn;Lehrgang\r\n";exit;
 }
-$titles=['csv-import'=>'Teilnehmer importieren','dashboard'=>'Ausbildungsübersicht','person'=>'Teilnehmer','lessons'=>'Termine & Anwesenheiten','lesson'=>'Anwesenheit erfassen','import'=>'Importprüfung','account'=>'Dein Zugang','documents'=>'Unterlagen','schedule'=>'Terminplan','schedule-entry'=>'Terminplan'];
-if(!isset($titles[$page])&&$page!=='export') { http_response_code(404);$page='dashboard'; }
+$titles=['csv-import'=>'Teilnehmer importieren','dashboard'=>'Ausbildungsübersicht','person'=>'Teilnehmer','lessons'=>'Termine & Anwesenheiten','lesson'=>'Anwesenheit erfassen','import'=>'Importprüfung','account'=>'Dein Zugang','documents'=>'Unterlagen','schedule'=>'Terminplan','schedule-entry'=>'Terminplan','bookings'=>'Buchungen','booking-event'=>'Buchbarer Termin','settings'=>'Einstellungen','settings-mail'=>'Einstellungen'];
+if(!isset($titles[$page])&&!in_array($page,['export','booking-export'],true)) { http_response_code(404);$page='dashboard'; }
+if($page==='booking-export'){
+    $event=$bookings->event($id);if(!$event){http_response_code(404);exit('Termin nicht gefunden.');}
+    header('Content-Type: text/csv; charset=UTF-8');header('Content-Disposition: attachment; filename="buchungen-'.$id.'.csv"');
+    $out=fopen('php://output','w');fwrite($out,"\xEF\xBB\xBF");
+    fputcsv($out,['Termin','Beginn','Name','Feuerwehr','E-Mail','Gebucht am','Status'],';','"','');
+    foreach($bookings->forEvent($id) as $b){$row=[$event['title'],$event['starts_at'],$b['name'],$b['department'],$b['email'],date('Y-m-d H:i',(int)$b['created_at']),(int)$b['active']?($b['status']==='pending'?'unbestätigt':'gebucht'):'storniert'];foreach($row as &$v)if(is_string($v)&&preg_match('/^[\s]*[=+@\-]/u',$v))$v="'".$v;unset($v);fputcsv($out,$row,';','"','');}fclose($out);exit;
+}
 if($page==='export') {
     header('Content-Type: text/csv; charset=UTF-8');header('Content-Disposition: attachment; filename="ausbildung-'.$year.'.csv"');
     $out=fopen('php://output','w');fwrite($out,"\xEF\xBB\xBF");
@@ -292,7 +322,13 @@ if($page==='export') {
     foreach($s->participants($year) as $p){$row=[$p['last_name'],$p['first_name'],$p['department'],$year,$p['annual'],$p['total'],max(0,10-(int)$p['total']),$p['exam_date']?:$p['exam_label']];foreach($row as &$v)if(is_string($v)&&preg_match('/^[\s]*[=+@\-]/u',$v))$v="'".$v;unset($v);fputcsv($out,$row,';','"','');}fclose($out);exit;
 }
 head($titles[$page]); if($error)echo '<p class="error" role="alert">'.h($error).'</p>';
-echo '<p class="muted">Prüfungsvoraussetzung: mindestens <strong>10 Teilnahmen</strong>. Eine Ausbildungseinheit zählt als eine Teilnahme.</p>';
+$settingsTabs=['settings'=>'Terminbuchung','settings-mail'=>'E-Mail','documents'=>'Unterlagen','import'=>'Importprüfung','account'=>'Zugang'];
+if(isset($settingsTabs[$page])||$page==='csv-import'){
+    echo '<nav class="tabs no-print" aria-label="Einstellungen">';
+    foreach($settingsTabs as $tab=>$label)echo '<a href="/?page='.$tab.'"'.($tab===$page?' aria-current="page"':'').'>'.$label.'</a>';
+    echo '</nav>';
+}
+if(!in_array($page,['bookings','booking-event','settings','settings-mail'],true))echo '<p class="muted">Prüfungsvoraussetzung: mindestens <strong>10 Teilnahmen</strong>. Eine Ausbildungseinheit zählt als eine Teilnahme.</p>';
 if(in_array($page,['dashboard','lessons'],true)) {
     echo '<form class="filters" method="get"><input type="hidden" name="page" value="'.h($page).'"><label>Ausbildungsjahr<select name="year">';
     foreach($years as $y)echo '<option '.($y===$year?'selected':'').'>'.$y.'</option>';
@@ -301,6 +337,8 @@ if(in_array($page,['dashboard','lessons'],true)) {
 if($page==='csv-import')require __DIR__.'/../app/csv-page.php';
 if($page==='documents')require __DIR__.'/../app/documents-page.php';
 if(in_array($page,['schedule','schedule-entry'],true))require __DIR__.'/../app/schedule-pages.php';
+if(in_array($page,['bookings','booking-event'],true))require __DIR__.'/../app/booking-pages.php';
+if(in_array($page,['settings','settings-mail'],true))require __DIR__.'/../app/settings-page.php';
 if($page==='dashboard') {
     $people=$s->participants($year);$active=array_filter($people,fn($p)=>!$p['archived']);$ready=count(array_filter($active,fn($p)=>$p['total']>=10&&!$p['exam_date']&&!$p['exam_label']));
     $passed=count(array_filter($people,fn($p)=>$p['exam_date']||$p['exam_label']));
