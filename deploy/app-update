@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+# Spielt ein signiertes Updatepaket ein. Aufruf: sudo /usr/local/sbin/app-update ZIEL PAKETORDNER
+# ZIEL: ausbildung | ausbildung-dev | einsatzleiter | einsatzleiter-dev
+# PAKETORDNER: Name unter /home/einsatzadmin, endet auf -stage (z. B. ausbildung-documents-dev-stage).
+# Das Paket muss eine manifest-Datei mit gültiger Signatur (manifest.sig) enthalten, erstellt am Mac mit
+# deploy/sign_update.sh. Ohne den privaten Signaturschlüssel kann dieses Programm nichts ausführen.
+set -euo pipefail
+umask 077
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+[[ $(id -u) == 0 ]] || { echo 'Bitte mit sudo ausführen.'; exit 1; }
+signers=/etc/app-update/allowed_signers
+max_age=86400
+target=${1:-}
+package=${2:-}
+case "$target" in
+    ausbildung|einsatzleiter) mode=prod;;
+    ausbildung-dev|einsatzleiter-dev) mode=dev;;
+    *) echo 'Aufruf: sudo app-update ausbildung|ausbildung-dev|einsatzleiter|einsatzleiter-dev PAKETORDNER'; exit 1;;
+esac
+[[ "$package" =~ ^[a-z0-9][a-z0-9-]*-stage$ ]] || { echo 'Ungültiger Paketordner.'; exit 1; }
+stage=/home/einsatzadmin/$package
+[[ -d "$stage" && ! -L "$stage" ]] || { echo "Paketordner $stage fehlt."; exit 1; }
+[[ -f "$signers" && $(stat -c %u "$signers") == 0 ]] || { echo 'Signaturschlüssel nicht eingerichtet.'; exit 1; }
+exec 9>/run/lock/app-update.lock
+flock -n 9 || { echo 'Ein Update läuft bereits.'; exit 1; }
+# Erst in einen root-eigenen Ordner kopieren, dann prüfen: spätere Änderungen im Paketordner wirken nicht mehr.
+work=$(mktemp -d /root/app-update.XXXXXX)
+trap 'rm -rf "$work"' EXIT
+while IFS= read -r -d '' file; do
+    name=${file##*/}
+    [[ "$name" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || { echo "Unzulässiger Dateiname: $name"; exit 1; }
+    cp --no-dereference --preserve=mode "$file" "$work/$name"
+done < <(find "$stage" -mindepth 1 -maxdepth 1 -type f -print0)
+find "$stage" "$work" -mindepth 1 -maxdepth 1 ! -type f | grep -q . && { echo 'Paket enthält Unterordner oder Verknüpfungen.'; exit 1; }
+[[ -f "$work/manifest" && -f "$work/manifest.sig" && -f "$work/update.sh" ]] || { echo 'manifest, manifest.sig oder update.sh fehlt.'; exit 1; }
+ssh-keygen -Y verify -f "$signers" -I deploy -n app-update -s "$work/manifest.sig" < "$work/manifest" >/dev/null 2>&1 \
+    || { echo 'Signatur ungültig: Abbruch.'; exit 1; }
+[[ $(sed -n 1p "$work/manifest") == "target=$target" ]] || { echo "Paket ist nicht für $target signiert."; exit 1; }
+created=$(sed -n 2p "$work/manifest" | sed -n 's/^created=\([0-9]\{1,\}\)$/\1/p')
+[[ -n "$created" ]] || { echo 'Manifest ohne Zeitstempel.'; exit 1; }
+age=$(( $(date +%s) - created ))
+(( age >= -300 && age <= max_age )) || { echo 'Signatur ist älter als 24 Stunden: Paket neu signieren.'; exit 1; }
+# Jede Datei (außer Manifest und Signatur) muss genau einmal mit passender Prüfsumme gelistet sein.
+listed=$(tail -n +3 "$work/manifest" | sed 's/^[0-9a-f]\{64\}  //' | sort)
+present=$(cd "$work" && ls -1A | grep -vxE 'manifest|manifest\.sig' | sort)
+[[ "$listed" == "$present" ]] || { echo 'Dateien im Paket und Manifest stimmen nicht überein.'; exit 1; }
+(cd "$work" && tail -n +3 manifest | sha256sum --quiet -c -) || { echo 'Prüfsummen stimmen nicht.'; exit 1; }
+logger -t app-update "Start $target aus $package durch ${SUDO_USER:-root}"
+status=0
+(cd "$work" && bash ./update.sh "$mode") || status=$?
+logger -t app-update "Ende $target aus $package, Status $status"
+exit "$status"
