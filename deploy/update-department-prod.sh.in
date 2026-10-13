@@ -21,6 +21,6 @@ if [[ "$old" != "$expected" ]]; then
 fi
 tmp=$(mktemp)
 trap 'rm -f "$tmp"' EXIT
-curl --fail --silent --show-error --resolve ausbildung.einsatzleiter.app:443:127.0.0.1 'https://ausbildung.einsatzleiter.app/?page=participant-login' -o "$tmp"
+curl --fail --silent --show-error --resolve ffvgs-ausbildung.de:443:31.70.156.126 'https://ffvgs-ausbildung.de/?page=participant-login' -o "$tmp"
 grep -qE '<select name="department">|Teilnehmerzugang ist derzeit nicht freigeschaltet' "$tmp"
 echo 'Feuerwehr-Auswahlfeld auf Produktion eingerichtet. Daten und zentraler Code unverändert.'

@@ -3,18 +3,19 @@ set -euo pipefail
 umask 077
 [[ $(id -u) == 0 ]] || { echo 'Bitte mit sudo ausführen.'; exit 1; }
 stage=/home/einsatzadmin/ausbildung-prod-stage
-host=ausbildung.einsatzleiter.app
+host=ffvgs-ausbildung.de
+ip=31.70.156.126
 app=/opt/ausbildung
 data=/var/lib/ausbildung
 pool=/etc/php/8.3/fpm/pool.d/ausbildung.conf
-site=/etc/nginx/sites-available/ausbildung.einsatzleiter.app
-link=/etc/nginx/sites-enabled/ausbildung.einsatzleiter.app
+site=/etc/nginx/sites-available/ffvgs-ausbildung.de
+link=/etc/nginx/sites-enabled/ffvgs-ausbildung.de
 cron=/etc/cron.d/ausbildung-backup
 exec 9>/run/lock/ausbildung-prod-install.lock
 flock -n 9 || { echo 'Installation läuft bereits.'; exit 1; }
 [[ $(sha256sum "$stage/code.tar" | cut -d' ' -f1) == '@@CODE_SHA@@' ]] || { echo 'Paket-Prüfsumme stimmt nicht.'; exit 1; }
-getent ahostsv4 "$host" | awk '{print $1}' | grep -qx 31.70.130.202 || { echo 'DNS prüfen.'; exit 1; }
-openssl x509 -in /etc/ssl/einsatzleiter/fullchain.pem -noout -checkhost "$host" | grep -q 'does match' || exit 1
+getent ahostsv4 "$host" | awk '{print $1}' | grep -qx "$ip" || { echo 'DNS prüfen.'; exit 1; }
+openssl x509 -in /etc/ssl/ausbildung/fullchain.pem -noout -checkhost "$host" | grep -q 'does match' || exit 1
 [[ ! -d "$app" || -f "$app/.ausbildung-prod-owned" ]] || { echo 'Fremdes App-Verzeichnis.'; exit 1; }
 [[ ! -d "$data" || -f "$data/.ausbildung-prod-owned" ]] || { echo 'Fremdes Datenverzeichnis.'; exit 1; }
 for file in "$pool" "$site" "$cron"; do
@@ -84,11 +85,11 @@ CRON
 chmod 0644 "$cron"
 systemctl reload php8.3-fpm
 systemctl reload nginx
-curl --fail --silent --show-error --resolve "$host:443:127.0.0.1" "https://$host/" -o "$tmp/check.html"
+curl --fail --silent --show-error --resolve "$host:443:$ip" "https://$host/" -o "$tmp/check.html"
 grep -q Ausbildungsverwaltung "$tmp/check.html"
 if grep -q 'Testumgebung' "$tmp/check.html"; then echo 'Falsche Laufzeitumgebung.'; exit 1; fi
 for path in /private/training.sqlite /bin/manage.php /app/Store.php /source-import.json /.git/config; do
-    code=$(curl --silent --show-error --resolve "$host:443:127.0.0.1" -o /dev/null -w '%{http_code}' "https://$host$path")
+    code=$(curl --silent --show-error --resolve "$host:443:$ip" -o /dev/null -w '%{http_code}' "https://$host$path")
     [[ "$code" == 404 ]] || { echo "Dateischutzprüfung fehlgeschlagen: $path"; exit 1; }
 done
 echo "Produktive Ausbildungsverwaltung bereit: https://$host"

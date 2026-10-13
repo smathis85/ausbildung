@@ -20,7 +20,7 @@ $dataDir=getenv('TRAINING_DATA_DIR')?:__DIR__.'/../private';
 $local=getenv('TRAINING_LOCAL_TEST')==='1';
 define('TRAINING_PRODUCTION',getenv('TRAINING_ENV')==='production');
 // Fixed public address for links in e-mails; never taken from the Host header outside local tests.
-define('TRAINING_BASE_URL',$local?'http://'.preg_replace('/[^A-Za-z0-9.:\[\]-]/','',$_SERVER['HTTP_HOST']??'127.0.0.1'):(TRAINING_PRODUCTION?'https://ausbildung.einsatzleiter.app':'https://ausbildung-dev.einsatzleiter.app'));
+define('TRAINING_BASE_URL',$local?'http://'.preg_replace('/[^A-Za-z0-9.:\[\]-]/','',$_SERVER['HTTP_HOST']??'127.0.0.1'):(TRAINING_PRODUCTION?'https://ffvgs-ausbildung.de':'https://ausbildung-dev.einsatzleiter.app'));
 if(!$local && ($_SERVER['HTTPS']??'')!=='on') { http_response_code(400); exit('HTTPS erforderlich.'); }
 header("Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
 header('X-Content-Type-Options: nosniff'); header('Referrer-Policy: no-referrer'); header('X-Frame-Options: DENY');

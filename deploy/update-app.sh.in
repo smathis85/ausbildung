@@ -4,8 +4,8 @@ set -euo pipefail
 umask 077
 [[ $(id -u) == 0 ]] || { echo 'Bitte mit sudo ausführen.'; exit 1; }
 case "${1:-}" in
-    prod) name=ausbildung; owned=.ausbildung-prod-owned; marker=AUSBILDUNG_PROD_V1; host=ausbildung.einsatzleiter.app;;
-    dev) name=ausbildung-dev; owned=.ausbildung-dev-owned; marker=AUSBILDUNG_DEV_V1; host=ausbildung-dev.einsatzleiter.app;;
+    prod) name=ausbildung; owned=.ausbildung-prod-owned; marker=AUSBILDUNG_PROD_V1; host=ffvgs-ausbildung.de; ip=31.70.156.126;;
+    dev) name=ausbildung-dev; owned=.ausbildung-dev-owned; marker=AUSBILDUNG_DEV_V1; host=ausbildung-dev.einsatzleiter.app; ip=127.0.0.1;;
     *) echo 'Aufruf: sudo bash update.sh dev|prod'; exit 1;;
 esac
 stage=$(cd "$(dirname "$0")" && pwd)
@@ -51,15 +51,15 @@ if [[ -n "$schedule_sha" ]]; then
     runuser -u "$name" -- env TRAINING_DATA_DIR="$data" php "$app/bin/manage.php" import-schedule "$tmp/terminplan.json"
 fi
 systemctl reload php8.3-fpm
-curl --fail --silent --show-error --resolve "$host:443:127.0.0.1" "https://$host/" -o "$tmp/check.html"
+curl --fail --silent --show-error --resolve "$host:443:$ip" "https://$host/" -o "$tmp/check.html"
 grep -q 'Admin-Anmeldung' "$tmp/check.html"
 # Ohne Anmeldung kein Terminplan, nur die Anmeldeseite.
-curl --fail --silent --show-error --resolve "$host:443:127.0.0.1" "https://$host/?page=schedule" -o "$tmp/schedule.html"
+curl --fail --silent --show-error --resolve "$host:443:$ip" "https://$host/?page=schedule" -o "$tmp/schedule.html"
 grep -q 'Admin-Anmeldung' "$tmp/schedule.html" || { echo 'Zugriffsschutz prüfen!'; exit 1; }
 # Öffentliche Buchungsseite antwortet, Verwaltung der Buchungen nur mit Anmeldung.
-curl --fail --silent --show-error --resolve "$host:443:127.0.0.1" "https://$host/?page=termine" -o "$tmp/termine.html"
+curl --fail --silent --show-error --resolve "$host:443:$ip" "https://$host/?page=termine" -o "$tmp/termine.html"
 grep -q 'Termine buchen' "$tmp/termine.html" || { echo 'Buchungsseite prüfen!'; exit 1; }
-curl --fail --silent --show-error --resolve "$host:443:127.0.0.1" "https://$host/?page=bookings" -o "$tmp/bookings.html"
+curl --fail --silent --show-error --resolve "$host:443:$ip" "https://$host/?page=bookings" -o "$tmp/bookings.html"
 grep -q 'Admin-Anmeldung' "$tmp/bookings.html" || { echo 'Zugriffsschutz prüfen!'; exit 1; }
 echo "Update auf $host eingespielt. Sicherung: /var/backups/ausbildung-code/$name-before-update-$stamp.tar.gz"
 echo 'Einsatzleiter.app wurde nicht verändert.'

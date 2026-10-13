@@ -5,8 +5,8 @@ set -euo pipefail
 umask 077
 [[ $(id -u) == 0 ]] || { echo 'Bitte mit sudo ausführen.'; exit 1; }
 case "${1:-}" in
-    prod) name=ausbildung; owned=.ausbildung-prod-owned; marker=AUSBILDUNG_PROD_V1; host=ausbildung.einsatzleiter.app;;
-    dev) name=ausbildung-dev; owned=.ausbildung-dev-owned; marker=AUSBILDUNG_DEV_V1; host=ausbildung-dev.einsatzleiter.app;;
+    prod) name=ausbildung; owned=.ausbildung-prod-owned; marker=AUSBILDUNG_PROD_V1; host=ffvgs-ausbildung.de; ip=31.70.156.126;;
+    dev) name=ausbildung-dev; owned=.ausbildung-dev-owned; marker=AUSBILDUNG_DEV_V1; host=ausbildung-dev.einsatzleiter.app; ip=127.0.0.1;;
     *) echo 'Aufruf: sudo bash fix-upload-tmp.sh prod|dev'; exit 1;;
 esac
 data=/var/lib/$name
@@ -25,5 +25,5 @@ if grep -Eq "/tmp/$name\$" "$pool"; then
     systemctl reload php8.3-fpm
 fi
 grep -q "upload_tmp_dir\] = $data/tmp" "$pool" || { echo 'Upload-Verzeichnis nicht gesetzt.'; exit 1; }
-curl --fail --silent --show-error --resolve "$host:443:127.0.0.1" "https://$host/" -o /dev/null
+curl --fail --silent --show-error --resolve "$host:443:$ip" "https://$host/" -o /dev/null
 echo "Upload-Verzeichnis für $name liegt jetzt dauerhaft unter $data/tmp. Daten unverändert."

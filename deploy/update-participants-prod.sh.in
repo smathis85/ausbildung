@@ -26,9 +26,9 @@ for file in app/ParticipantAccess.php app/ParticipantOverview.php app/participan
     mv "$app/$file.next" "$app/$file"
 done
 systemctl reload php8.3-fpm
-curl --fail --silent --show-error --resolve ausbildung.einsatzleiter.app:443:127.0.0.1 https://ausbildung.einsatzleiter.app/ -o "$tmp/login.html"
+curl --fail --silent --show-error --resolve ffvgs-ausbildung.de:443:31.70.156.126 https://ffvgs-ausbildung.de/ -o "$tmp/login.html"
 grep -q 'Zur Teilnehmeranmeldung' "$tmp/login.html"
-curl --fail --silent --show-error --resolve ausbildung.einsatzleiter.app:443:127.0.0.1 'https://ausbildung.einsatzleiter.app/?page=participant-login' -o "$tmp/participant.html"
+curl --fail --silent --show-error --resolve ffvgs-ausbildung.de:443:31.70.156.126 'https://ffvgs-ausbildung.de/?page=participant-login' -o "$tmp/participant.html"
 grep -q 'Teilnehmeranmeldung' "$tmp/participant.html"
 echo 'Teilnehmerzugang auf Produktion bereit. Als Admin unter Zugang den zentralen Code setzen und Teilnehmerzugang freischalten.'
 echo 'Ausbildungs-DEV und Einsatzleiter.app wurden nicht verändert.'
