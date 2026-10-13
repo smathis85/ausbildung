@@ -60,7 +60,7 @@ try:
  status,body=req(anon,'/?page=termine');assert status==200 and 'nicht freigeschaltet' in body and 'Termine buchen' in body
  _,body=req(anon,'/');assert 'Zu den Terminen' not in body
  for path in ['/?page=bookings','/?page=booking-event','/?page=settings','/?page=settings-mail','/?page=booking-export&id=1']:
-  status,body=req(anon,path);assert 'Admin-Anmeldung' in body and 'Buchbare Termine' not in body,path
+  status,body=req(anon,path);assert 'Admin-Anmeldung' in body and '<details class="login-menu" open>' in body and 'Buchbare Termine' not in body,path
  status,body=post(anon,'/',{'action':'booking_event_save','id':0,'title':'Hack','date':day,'start':'19:00','capacity':5});assert status==401
  # Navigation: Unterlagen, Importprüfung and Zugang moved under Einstellungen.
  _,body=req(admin,'/?page=settings');nav=body.split('<main>')[0]
@@ -92,7 +92,9 @@ try:
  status,body=post(admin,'/?page=booking-event',{'action':'booking_event_save','id':0,'title':'Fehler','date':day,'start':'19:00','end':'18:00','capacity':5,'location':'Behalten'})
  assert 'nach dem Beginn' in body and 'value="Behalten"' in body
  # Public list and form.
- _,body=req(anon,'/');assert 'Zu den Terminen' in body
+ _,body=req(anon,'/');assert 'Zu den Terminen' in body and 'Anmeldung Teilnehmer 2-Jahres-Ausbildung' in body
+ # Start page lists bookable events directly; the admin login sits closed behind the header icon.
+ assert 'Atemschutz &lt;Übung&gt;' in body and 'Geheimer Entwurf' not in body and '<details class="login-menu">' in body
  _,body=req(anon,'/?page=termine');assert 'Atemschutz &lt;Übung&gt;' in body and 'Ersatztermin' in body and 'Geheimer Entwurf' not in body and 'Noch 2 frei' in body
  status,_=req(anon,'/?page=termin&id=3');assert status==404
  _,form=req(anon,'/?page=termin&id=1');assert 'name="website"' in form and 'Buchungscode' in form and 'Selters' in form and 'Andere Feuerwehr' in form and 'Daten nur für diesen Termin.' in form
