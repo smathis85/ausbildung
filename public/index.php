@@ -89,10 +89,26 @@ function input(string $label,string $name,mixed $value='',string $type='text',st
     return '<label>'.h($label).'<input type="'.h($type).'" name="'.h($name).'" value="'.h($value).'" '.$extra.'></label>';
 }
 function head(string $title,bool $auth=true): void {
-    echo '<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>'.h($title).' · Ausbildung</title><link rel="manifest" href="/?asset=app-manifest-v1"><link rel="apple-touch-icon" sizes="180x180" href="/?asset=app-icon-180-v1"><link rel="icon" type="image/png" sizes="192x192" href="/?asset=app-icon-192-v1"><meta name="apple-mobile-web-app-title" content="Ausbildung"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="theme-color" content="#142d36"><link rel="stylesheet" href="/assets/app.css?v=plan1"><script defer src="/assets/app.js?v=plan1"></script></head><body><header><a class="brand" href="/"><img class="brand-logo" src="/?asset=brand-logo" width="44" height="51" alt="Wappen der Verbandsgemeinde Selters"><span>Ausbildung <small>VG Selters'.(TRAINING_PRODUCTION?'':' · DEV').'</small></span></a>';
+    echo '<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>'.h($title).' · Ausbildung</title><link rel="manifest" href="/?asset=app-manifest-v1"><link rel="apple-touch-icon" sizes="180x180" href="/?asset=app-icon-180-v1"><link rel="icon" type="image/png" sizes="192x192" href="/?asset=app-icon-192-v1"><meta name="apple-mobile-web-app-title" content="Ausbildung"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="theme-color" content="#142d36"><link rel="stylesheet" href="/assets/app.css?v=login1"><script defer src="/assets/app.js?v=plan1"></script></head><body><header><a class="brand" href="/"><img class="brand-logo" src="/?asset=brand-logo" width="44" height="51" alt="Wappen der Verbandsgemeinde Selters"><span>Ausbildung <small>VG Selters'.(TRAINING_PRODUCTION?'':' · DEV').'</small></span></a>';
+    if(!$auth) echo admin_login_menu();
     if($auth) echo '<nav aria-label="Hauptnavigation"><a href="/">Übersicht</a><a href="/?page=schedule">Terminplan</a><a href="/?page=lessons">Termine</a><a href="/?page=bookings">Buchungen</a><a href="/?page=settings">Einstellungen</a><form method="post">'.csrf().'<input type="hidden" name="action" value="logout"><button class="subtle">Abmelden</button></form></nav>';
     echo '</header><main><h1>'.h($title).'</h1>';
     if(isset($_SESSION['flash'])) { echo '<p class="notice" role="status">'.h($_SESSION['flash']).'</p>'; unset($_SESSION['flash']); }
+}
+/** Admin login behind the icon in the header; opens by itself after a failed login and on protected pages. */
+function admin_login_menu(): string {
+    global $auth,$admins,$page,$error;
+    if($auth||($page==='setup'&&$admins->pendingSetup()))return '';
+    $failed=$error!==null&&in_array($_POST['action']??null,['login','setup'],true);
+    $public=['dashboard','termine','termin','gebucht','buchung','participant-login','me','document'];
+    $open=$failed||!in_array($page,$public,true);
+    $icon='<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><path d="M10 17l5-5-5-5"/><path d="M15 12H3"/></svg>';
+    $html='<details class="login-menu"'.($open?' open':'').'><summary title="Admin-Login" aria-label="Admin-Login">'.$icon.'</summary><div class="login-panel"><h2>Admin-Anmeldung</h2>';
+    // Shown here only, so the page below does not repeat the login error.
+    if($failed){$html.='<p class="error" role="alert">'.h($error).'</p>';$error=null;}
+    $html.='<form method="post">'.csrf().'<input type="hidden" name="action" value="login">'.input('E-Mail-Adresse','email','','email','required autocomplete="username"').input('Passwort','password','','password','required autocomplete="current-password"').'<button>Anmelden</button></form>';
+    if($admins->pendingSetup())$html.='<p><a href="/?page=setup">Admin-Zugang mit Einrichtungscode aktivieren</a></p>';
+    return $html.'</div></details>';
 }
 function foot(): void { echo '</main><footer>Eigenständige Ausbildungsverwaltung'.(TRAINING_PRODUCTION?'':' · Testumgebung').'</footer></body></html>'; }
 try {
@@ -287,16 +303,19 @@ require __DIR__.'/../app/booking-public.php';
 require __DIR__.'/../app/participant-pages.php';
 if(!$auth) {
     $setup=$page==='setup'&&$admins->pendingSetup(); head($setup?'Zugang einrichten':'Willkommen',false);
-    if(!$setup&&$appSettings->on('booking_enabled'))echo '<section class="card auth"><h2>Termine buchen</h2><p>Für alle: freie Plätze bei Ausbildungsterminen buchen, ohne Konto.</p><a class="button" href="/?page=termine">Zu den Terminen</a></section>';
-    if(!$setup)echo '<section class="card auth"><h2>Meine Teilnahmen</h2><p>Für Kameradinnen und Kameraden: mit Name und gemeinsamem Ausbildungscode anmelden.</p><a class="button" href="/?page=participant-login">Zur Teilnehmeranmeldung</a></section>';
-    echo '<section class="auth card"><h2>'.($setup?'Dein persönlicher Zugang':'Admin-Anmeldung').'</h2><p>Geschützter Bereich für die Ausbildung der Feuerwehr VG Selters.</p>';
+    if(!$setup){
+        // Admin login lives in the header (admin_login_menu); the start page is for participants and bookings.
+        if($error)echo '<p class="error" role="alert">'.h($error).'</p>';
+        echo '<section class="card auth"><h2>Anmeldung Teilnehmer 2-Jahres-Ausbildung</h2><p>Für Kameradinnen und Kameraden: mit Name und gemeinsamem Ausbildungscode anmelden.</p><a class="button" href="/?page=participant-login">Zur Teilnehmeranmeldung</a></section>';
+        echo public_booking_card();foot();exit;
+    }
+    echo '<section class="auth card"><h2>Dein persönlicher Zugang</h2><p>Geschützter Bereich für die Ausbildung der Feuerwehr VG Selters.</p>';
     if($error)echo '<p class="error" role="alert">'.h($error).'</p>';
-    echo '<form method="post">'.csrf().'<input type="hidden" name="action" value="'.($setup?'setup':'login').'">'.input('E-Mail-Adresse','email','','email','required autocomplete="username"');
-    if($setup) echo input('Einmaliger Einrichtungscode','setup_code','','password','required autocomplete="off"');
-    echo input($setup?'Passwort festlegen (mindestens 12 Zeichen)':'Passwort','password','','password','required autocomplete="'.($setup?'new-password':'current-password').'"');
-    if($setup) echo input('Passwort wiederholen','password_confirmation','','password','required autocomplete="new-password"');
-    echo '<button>'.($setup?'Zugang aktivieren':'Anmelden').'</button></form>';
-    if(!$setup&&$admins->pendingSetup())echo '<p><a href="/?page=setup">Admin-Zugang mit Einrichtungscode aktivieren</a></p>';
+    echo '<form method="post">'.csrf().'<input type="hidden" name="action" value="setup">'.input('E-Mail-Adresse','email','','email','required autocomplete="username"');
+    echo input('Einmaliger Einrichtungscode','setup_code','','password','required autocomplete="off"');
+    echo input('Passwort festlegen (mindestens 12 Zeichen)','password','','password','required autocomplete="new-password"');
+    echo input('Passwort wiederholen','password_confirmation','','password','required autocomplete="new-password"');
+    echo '<button>Zugang aktivieren</button></form>';
     echo '</section>';foot();exit;
 }
 $years=array_map('intval',array_column($s->rows('SELECT DISTINCT year FROM enrollments UNION SELECT DISTINCT year FROM lessons ORDER BY year DESC'),'year'));

@@ -56,7 +56,7 @@ if($participantAuth){
     echo '</tbody></table></div></section><p>Bei Fragen oder Korrekturen wende dich bitte an die Ausbildungsleitung.</p>';foot();exit;
 }
 if(!$auth&&in_array($page,['participant-login','me'],true)){
-    head('Meine Teilnahmen',false);
+    head('Anmeldung Teilnehmer 2-Jahres-Ausbildung',false);
     echo '<section class="card auth"><h2>Teilnehmeranmeldung</h2><p>Gib deinen Namen und den gemeinsamen Ausbildungscode ein.</p>';
     if($error)echo '<p class="error" role="alert">'.h($error).'</p>';
     if(!$access->settings()['enabled'])echo '<p>Der Teilnehmerzugang ist derzeit nicht freigeschaltet.</p>';
@@ -71,5 +71,5 @@ if(!$auth&&in_array($page,['participant-login','me'],true)){
         foreach($departments as$department)echo '<option value="'.h($department).'" '.($selectedDepartment===Ausbildung\ParticipantAccess::normalize($department)?'selected':'').'>'.h($department).'</option>';
         echo '</select></label><button>Anmelden</button></form>';
     }
-    echo '<p><a href="/">Zur Admin-Anmeldung</a></p></section>';foot();exit;
+    echo '</section>'.public_booking_card();foot();exit;
 }

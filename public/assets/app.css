@@ -99,3 +99,8 @@ form.inline{display:flex;align-items:center;gap:8px;margin:6px 0 0;flex-wrap:wra
 @media print{.print-only{display:table-cell!important}.booking-table .print-skip{display:none}.booking-table .sign-cell{width:45mm;border-bottom:.5pt solid #999}.tabs{display:none}}
 @media (max-width:640px){.booking-list li>div:last-child{width:100%;justify-content:space-between}}
 [hidden]{display:none!important}
+/* Admin-Login hinter dem Symbol oben rechts im Banner; Buchungsliste auf der Startseite. */
+.login-menu{position:relative;margin-left:auto}.login-menu>summary{list-style:none;display:flex;align-items:center;justify-content:center;width:44px;height:44px;border-radius:8px;color:white;cursor:pointer;padding:0}.login-menu>summary::-webkit-details-marker{display:none}.login-menu>summary:hover,.login-menu[open]>summary{background:#28414b}
+.login-panel{position:absolute;right:0;top:calc(100% + 10px);z-index:10;width:min(340px,calc(100vw - 32px));background:white;color:#172238;border:1px solid #e0e5eb;border-radius:12px;padding:20px;box-shadow:0 12px 32px #15253833}.login-panel h2{font-size:18px}.login-panel button{width:100%}.login-panel p:last-child{margin-bottom:0}
+.booking-teaser li{padding:12px 0;border-bottom:1px solid #e5e9ef}.booking-teaser li:last-child{border-bottom:0}.booking-teaser p{color:#59677b;font-size:14px}
+@media(max-width:700px){.login-menu>summary{width:40px;height:40px}}
