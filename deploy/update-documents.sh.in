@@ -4,8 +4,8 @@ set -euo pipefail
 umask 077
 [[ $(id -u) == 0 ]] || { echo 'Bitte mit sudo ausführen.'; exit 1; }
 case "${1:-}" in
-    prod) name=ausbildung; owned=.ausbildung-prod-owned; marker=AUSBILDUNG_PROD_V1; host=ausbildung.einsatzleiter.app;;
-    dev) name=ausbildung-dev; owned=.ausbildung-dev-owned; marker=AUSBILDUNG_DEV_V1; host=ausbildung-dev.einsatzleiter.app;;
+    prod) name=ausbildung; owned=.ausbildung-prod-owned; marker=AUSBILDUNG_PROD_V1; host=ffvgs-ausbildung.de; ip=31.70.156.126;;
+    dev) name=ausbildung-dev; owned=.ausbildung-dev-owned; marker=AUSBILDUNG_DEV_V1; host=ausbildung-dev.einsatzleiter.app; ip=127.0.0.1;;
     *) echo 'Aufruf: sudo bash update.sh dev|prod'; exit 1;;
 esac
 stage=$(cd "$(dirname "$0")" && pwd)
@@ -53,10 +53,10 @@ if ! php-fpm8.3 -t 2>/dev/null || ! nginx -t 2>/dev/null; then
 fi
 systemctl reload php8.3-fpm
 systemctl reload nginx
-curl --fail --silent --show-error --resolve "$host:443:127.0.0.1" "https://$host/" -o "$tmp/check.html"
+curl --fail --silent --show-error --resolve "$host:443:$ip" "https://$host/" -o "$tmp/check.html"
 grep -q 'Admin-Anmeldung' "$tmp/check.html"
 # Ohne Anmeldung darf keine Unterlage ausgeliefert werden, nur die Anmeldeseite.
-curl --fail --silent --show-error --resolve "$host:443:127.0.0.1" "https://$host/?page=document&id=1" -o "$tmp/document.html"
+curl --fail --silent --show-error --resolve "$host:443:$ip" "https://$host/?page=document&id=1" -o "$tmp/document.html"
 grep -q 'Admin-Anmeldung' "$tmp/document.html" || { echo 'Dateischutz prüfen!'; exit 1; }
 echo "Unterlagen und weitere Administratoren auf $host eingerichtet. Upload bis 50 MB."
 echo 'Einsatzleiter.app wurde nicht verändert.'
