@@ -19,6 +19,10 @@ final class Documents
     ];
     /** Types a browser can show directly without running page scripts in our origin. */
     public const VIEWABLE=['pdf','png','jpg','jpeg','gif','webp','mp4','mp3','txt'];
+    /** Detected content that is never accepted, whatever the extension says (active content). */
+    private const BLOCKED=['text/html','application/xhtml+xml','image/svg+xml','text/xml','application/xml','text/javascript','application/javascript','text/x-php','application/x-php','application/x-httpd-php','application/x-executable','application/x-dosexec','application/x-sharedlib','application/x-mach-binary'];
+    /** Viewable types whose content must match the extension. */
+    private const EXPECTED=['pdf'=>['application/pdf'],'png'=>['image/png'],'jpg'=>['image/jpeg'],'jpeg'=>['image/jpeg'],'gif'=>['image/gif'],'webp'=>['image/webp']];
     public function __construct(private Store $store,private string $dir) {}
     public static function viewable(array $doc): bool { return in_array($doc['extension'],self::VIEWABLE,true); }
     public static function size(int $bytes): string {
@@ -49,6 +53,7 @@ final class Documents
         $original=self::cleanName((string)($file['name']??''));
         $extension=strtolower(pathinfo($original,PATHINFO_EXTENSION));
         if(!isset(self::TYPES[$extension]))throw new RuntimeException('Dieser Dateityp ist nicht erlaubt. Erlaubt: '.implode(', ',array_keys(self::TYPES)).'.');
+        self::checkContent($file['tmp_name'],$extension);
         $title=trim($title)!==''?trim($title):pathinfo($original,PATHINFO_FILENAME);
         if(mb_strlen($title)>200||mb_strlen($description)>1000)throw new RuntimeException('Titel oder Beschreibung ist zu lang.');
         if(!is_dir($this->dir)&&!mkdir($this->dir,0700,true)&&!is_dir($this->dir))throw new RuntimeException('Ablage für Unterlagen nicht verfügbar.');
@@ -83,6 +88,12 @@ final class Documents
         });
         $path=$this->path($doc);if(is_file($path))unlink($path);
     }
+    /** Compares the actual file content with the extension (libmagic via fileinfo). */
+    public static function checkContent(string $path,string $extension): void {
+        $type=(new \finfo(FILEINFO_MIME_TYPE))->file($path)?:'application/octet-stream';
+        if(in_array($type,self::BLOCKED,true)||(isset(self::EXPECTED[$extension])&&!in_array($type,self::EXPECTED[$extension],true)))
+            throw new RuntimeException('Der Dateiinhalt passt nicht zur Endung .'.$extension.'. Bitte die Originaldatei hochladen.');
+    }
     public static function cleanName(string $name): string {
         $name=basename(str_replace('\\','/',$name));
         $name=preg_replace('/[\x00-\x1F\x7F"]+/u','',$name)??'';
@@ -97,7 +108,8 @@ final class Documents
         $size=(int)filesize($path);$inline=!$download&&self::viewable($doc);
         $fallback=preg_replace('/[^A-Za-z0-9._-]+/','_',$doc['original_name']);
         header_remove('Content-Security-Policy');
-        header("Content-Security-Policy: default-src 'none'; img-src 'self'; media-src 'self'; style-src 'unsafe-inline'; frame-ancestors 'none'");
+        // Everything except PDF opens in an opaque origin; browser PDF viewers do not render reliably in a sandbox.
+        header("Content-Security-Policy: default-src 'none'; img-src 'self'; media-src 'self'; style-src 'unsafe-inline'; frame-ancestors 'none'".($doc['extension']==='pdf'?'':'; sandbox'));
         header('Content-Type: '.self::TYPES[$doc['extension']]);
         header('Content-Disposition: '.($inline?'inline':'attachment').'; filename="'.$fallback.'"; filename*=UTF-8\'\''.rawurlencode($doc['original_name']));
         header('Accept-Ranges: bytes');
