@@ -1,6 +1,6 @@
 # Teilnehmeranmeldung mit zentralem Code
 
-Vom Benutzer ausdrücklich gewählt: Vorname, Nachname und ein gemeinsamer Ausbildungscode. Das ist eine gemeinsame Zugangshürde, keine persönliche Identitätsprüfung. Wer den Code kennt, kann einen fremden Namen eingeben. Dieser Umfang wurde erläutert und vom Benutzer akzeptiert. Umsetzung zunächst ausschließlich DEV; Produktion nicht freigegeben.
+Festgelegt: Vorname, Nachname und ein gemeinsamer Ausbildungscode. Das ist eine gemeinsame Zugangshürde, keine persönliche Identitätsprüfung. Wer den Code kennt, kann einen fremden Namen eingeben. Dieser Umfang ist bewusst so gewählt.
 
 ## Bedienung
 

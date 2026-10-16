@@ -2,7 +2,7 @@
 """Build a hash-pinned code update (app, public, bin) without data or credentials.
 Usage: build_update.py ZIEL [--schedule TERMINPLAN.json]
 The optional plan (personal names, never in git) is copied next to the package and imported once into an empty year."""
-import pathlib,tarfile,hashlib,sys,os,shutil
+import pathlib,tarfile,hashlib,sys,os,shutil,io,re
 root=pathlib.Path(__file__).resolve().parents[1]
 args=sys.argv[1:]
 schedule=None
@@ -14,7 +14,11 @@ with tarfile.open(out/'update.tar','w',format=tarfile.PAX_FORMAT) as archive:
         for p in sorted((root/section).rglob('*')):
             if p.is_file() and '__pycache__' not in p.parts:
                 info=archive.gettarinfo(str(p),arcname=str(p.relative_to(root)));info.uid=info.gid=0;info.uname=info.gname='root';info.mtime=0
-                with p.open('rb') as f:archive.addfile(info,f)
+                data=p.read_bytes()
+                # Delivered CSS/JS without developer comments; PHP comments never reach the browser anyway.
+                if p.suffix=='.css':data=re.sub(rb'/\*.*?\*/\n?',b'',data,flags=re.S)
+                if p.suffix=='.js':data=re.sub(rb'(?m)^[ \t]*//[^\n]*\n',b'',data)
+                info.size=len(data);archive.addfile(info,io.BytesIO(data))
 sha=hashlib.sha256((out/'update.tar').read_bytes()).hexdigest()
 schedule_sha=''
 if schedule:

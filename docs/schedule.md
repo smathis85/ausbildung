@@ -1,6 +1,6 @@
 # Terminplan (Oktober 2026)
 
-Vom Benutzer gewünscht: Terminplan nach Vorlage „Terminplan 2026“ pflegen und drucken, als Grundlage für Termine & Anwesenheiten; Teilnehmer dürfen ihn sehen. Samstage sind 2 Ausbildungseinheiten, alle anderen Tage 1.
+Ziel: Terminplan nach Vorlage „Terminplan 2026“ pflegen und drucken, als Grundlage für Termine & Anwesenheiten; Teilnehmer dürfen ihn sehen. Samstage sind 2 Ausbildungseinheiten, alle anderen Tage 1.
 
 - Menüpunkt „Terminplan“ (Admins): je Jahr eine Tabelle wie die Vorlage (Termin, Dauer, Ausbildungsinhalte/-methode, Fahrzeuge, Ausbilder). Je Termin: Datum, Dauer/Uhrzeit (Freitext), Thema (unterstrichen), Inhalte, Hinweise (rot), Fahrzeuge, Ausbilder (je eine Zeile).
 - Ausbildungseinheiten: „Automatisch“ = Samstag 2, sonst 1; manuell 1–4. Jeder Termin legt seine Einheiten in `lessons` an (`lessons.schedule_id`). Datum und Thema werden dorthin übernommen; Anwesenheit wird wie bisher je Einheit erfasst. Vorhandene Termine am selben Datum werden übernommen (Anwesenheiten bleiben). Einheiten mit Anwesenheit werden nie gelöscht; Reduzieren der Einheiten wird dann abgelehnt, Löschen des Termins lässt sie als einzelne Termine stehen.

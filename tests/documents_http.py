@@ -54,6 +54,7 @@ try:
  assert 'Unterlage hochgeladen' in body
  _,body,_=post(primary,'/?page=documents',{'action':'document_upload'},files={'document':('boese.php',b'<?php echo 1;')});assert 'Dateityp ist nicht erlaubt' in body
  _,body,_=post(primary,'/?page=documents',{'action':'document_upload'},files={'document':('seite.html',b'<script>alert(1)</script>')});assert 'Dateityp ist nicht erlaubt' in body
+ _,body,_=post(primary,'/?page=documents',{'action':'document_upload'},files={'document':('alt.doc',b'\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1synthetic')});assert 'Alte Office-Formate' in body
  # Content must match the extension: no HTML disguised as PDF, image or text.
  for name in ['getarnt.pdf','bild.png','notiz.txt']:
   _,body,_=post(primary,'/?page=documents',{'action':'document_upload'},files={'document':(name,b'<!doctype html><html><script>alert(1)</script></html>')});assert 'passt nicht zur Endung' in body,name
@@ -68,7 +69,7 @@ try:
  assert 'Unterlagen' in body and 'Merkblatt &lt;Atemschutz&gt;' in body and 'Intern' not in body and 'Ansehen' in body
  status,content,headers=req(participant,f'/?page=document&id={docs[0][0]}',raw=True)
  assert status==200 and content==pdf and headers['Content-Type']=='application/pdf' and headers['Content-Disposition'].startswith('inline;') and "filename*=UTF-8''Merkblatt%20Atemschutz%20%C3%A4.pdf" in headers['Content-Disposition']
- assert "default-src 'none'" in headers['Content-Security-Policy'] and 'sandbox' not in headers['Content-Security-Policy'] and headers['X-Content-Type-Options']=='nosniff' and headers['Cross-Origin-Resource-Policy']=='same-origin'
+ assert "default-src 'none'" in headers['Content-Security-Policy'] and headers['Content-Security-Policy'].endswith('; sandbox') and headers['X-Content-Type-Options']=='nosniff' and headers['Cross-Origin-Resource-Policy']=='same-origin'
  status,content,headers=req(participant,f'/?page=document&id={docs[0][0]}&download=1',raw=True);assert headers['Content-Disposition'].startswith('attachment;') and content==pdf
  status,content,headers=req(participant,f'/?page=document&id={docs[0][0]}',headers={'Range':'bytes=10-19'},raw=True);assert status==206 and content==pdf[10:20] and headers['Content-Range']==f'bytes 10-19/{len(pdf)}'
  status,content,_=req(participant,f'/?page=document&id={docs[0][0]}',headers={'Range':'bytes=-5'},raw=True);assert status==206 and content==pdf[-5:]

@@ -1,6 +1,6 @@
 # Unterlagen und weitere Administratoren (Oktober 2026)
 
-Vom Benutzer gewünscht: Admins laden Dateien hoch, angemeldete Teilnehmer sehen und laden sie herunter; zusätzlich weitere Admins anlegen. Einsatzleiter.app bleibt unverändert. Umsetzung zuerst auf DEV, Produktion erst nach ausdrücklicher Freigabe.
+Ziel: Admins laden Dateien hoch, angemeldete Teilnehmer sehen und laden sie herunter; zusätzlich weitere Admins anlegen. Einsatzleiter.app bleibt unverändert. Umsetzung zuerst auf DEV, Produktion erst nach ausdrücklicher Freigabe.
 
 ## Unterlagen
 

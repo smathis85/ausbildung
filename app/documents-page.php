@@ -3,8 +3,8 @@ declare(strict_types=1);
 // Administrator-only view, rendered through the authenticated main router.
 $max=Ausbildung\Documents::size(Ausbildung\Documents::MAX_BYTES);
 echo '<section class="card"><h2>Unterlage hochladen</h2><p>Freigegebene Unterlagen sehen alle angemeldeten Teilnehmer unter „Meine Teilnahmen“ und können sie ansehen oder herunterladen.</p><form method="post" enctype="multipart/form-data">'.csrf().'<input type="hidden" name="action" value="document_upload">';
-echo '<label>Datei (höchstens '.h($max).')<input type="file" name="document" required data-max-bytes="'.Ausbildung\Documents::MAX_BYTES.'" accept="'.h(implode(',',array_map(fn($e)=>'.'.$e,array_keys(Ausbildung\Documents::TYPES)))).'"></label>';
-echo '<p class="muted">Erlaubt: PDF, Word, Excel, PowerPoint, OpenDocument, Bilder, MP4/MP3, Text, CSV und ZIP.</p>';
+echo '<label>Datei (höchstens '.h($max).')<input type="file" name="document" required data-max-bytes="'.Ausbildung\Documents::MAX_BYTES.'" accept="'.h(implode(',',array_map(fn($e)=>'.'.$e,Ausbildung\Documents::uploadable()))).'"></label>';
+echo '<p class="muted">Erlaubt: PDF, Word, Excel, PowerPoint (docx, xlsx, pptx), OpenDocument, Bilder, MP4/MP3, Text, CSV und ZIP. Alte Formate .doc, .xls und .ppt bitte vorher neu speichern.</p>';
 echo '<div class="form-grid">'.input('Titel (leer lassen für den Dateinamen)','title','','text','maxlength="200"').input('Kurzbeschreibung (optional)','description','','text','maxlength="1000"').'</div>';
 echo '<label class="check"><input type="checkbox" name="visible" checked> Für Teilnehmer freigeben</label><button>Hochladen</button></form></section>';
 $docs=$documents->all(false);
