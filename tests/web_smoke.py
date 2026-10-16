@@ -25,6 +25,7 @@ try:
  for path in ['/?page=person&id=1&year=2026','/?page=export&year=2026','/?page=lesson&id=1','/?page=import']:
   assert 'Beispiel' not in get(path)[1]
  assert 'no-store' in headers['Cache-Control'] and 'frame-ancestors' in headers['Content-Security-Policy']
+ assert headers['Cross-Origin-Opener-Policy']=='same-origin' and headers['Cross-Origin-Resource-Policy']=='same-origin' and 'camera=()' in headers['Permissions-Policy']
  assert get('/',{'action':'login','email':'sascha.mathis@ffvgs.de','password':'password'})[0]==403
  status,body,_=get('/',{'action':'login','csrf':token(body),'email':'sascha.mathis@ffvgs.de','password':'password'})
  assert 'Anmeldung nicht möglich' in body and 'Beispiel' not in body

@@ -9,6 +9,7 @@ Vom Benutzer gewünscht: Admins laden Dateien hoch, angemeldete Teilnehmer sehen
 - Ablage außerhalb von public/: `/var/lib/<instanz>/documents/<zufälliger Name>` (0600). Metadaten in Tabelle `documents`.
 - Teilnehmer sehen freigegebene Unterlagen unter „Meine Teilnahmen“. PDF, Bilder, Video, Audio und Text lassen sich direkt ansehen, alles andere wird heruntergeladen. Nicht freigegebene Unterlagen antworten Teilnehmern mit 404. Ohne Anmeldung wird keine Datei ausgeliefert.
 - Auslieferung durch PHP mit eigener restriktiver CSP, nosniff und Range-Unterstützung (Video auf iOS).
+- Seit Oktober 2026: Beim Upload prüft `fileinfo` den Inhalt. HTML, SVG, XML, Skripte und Programme werden unabhängig von der Endung abgelehnt; PDF und Bilder müssen zur Endung passen. Alle Unterlagen außer PDF werden mit CSP `sandbox` ausgeliefert (eigener, undurchsichtiger Origin); PDF ohne, weil Browser-PDF-Viewer in der Sandbox nicht zuverlässig anzeigen.
 - Sicherung: `bin/backup.php` sichert nur die Datenbank. Der Ordner `documents` muss in die externe Serversicherung.
 
 ## Administratoren

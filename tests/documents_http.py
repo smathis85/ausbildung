@@ -54,6 +54,9 @@ try:
  assert 'Unterlage hochgeladen' in body
  _,body,_=post(primary,'/?page=documents',{'action':'document_upload'},files={'document':('boese.php',b'<?php echo 1;')});assert 'Dateityp ist nicht erlaubt' in body
  _,body,_=post(primary,'/?page=documents',{'action':'document_upload'},files={'document':('seite.html',b'<script>alert(1)</script>')});assert 'Dateityp ist nicht erlaubt' in body
+ # Content must match the extension: no HTML disguised as PDF, image or text.
+ for name in ['getarnt.pdf','bild.png','notiz.txt']:
+  _,body,_=post(primary,'/?page=documents',{'action':'document_upload'},files={'document':(name,b'<!doctype html><html><script>alert(1)</script></html>')});assert 'passt nicht zur Endung' in body,name
  status,body,_=post(primary,'/?page=documents',{'action':'document_upload'},files={'document':('gross.pdf',b'x'*1500000)});assert 'zu groß' in body,body[:300]
  status,body,_=post(primary,'/?page=documents',{'action':'document_upload'},files={'document':('riesig.pdf',b'x'*2500000)});assert status==413 and 'zu groß' in body
  docs=db.execute('SELECT id,stored_name,visible,original_name FROM documents ORDER BY id').fetchall();assert len(docs)==2 and docs[0][3]=='Merkblatt Atemschutz ä.pdf' and docs[1][2]==0
@@ -65,7 +68,7 @@ try:
  assert 'Unterlagen' in body and 'Merkblatt &lt;Atemschutz&gt;' in body and 'Intern' not in body and 'Ansehen' in body
  status,content,headers=req(participant,f'/?page=document&id={docs[0][0]}',raw=True)
  assert status==200 and content==pdf and headers['Content-Type']=='application/pdf' and headers['Content-Disposition'].startswith('inline;') and "filename*=UTF-8''Merkblatt%20Atemschutz%20%C3%A4.pdf" in headers['Content-Disposition']
- assert "default-src 'none'" in headers['Content-Security-Policy'] and headers['X-Content-Type-Options']=='nosniff'
+ assert "default-src 'none'" in headers['Content-Security-Policy'] and 'sandbox' not in headers['Content-Security-Policy'] and headers['X-Content-Type-Options']=='nosniff' and headers['Cross-Origin-Resource-Policy']=='same-origin'
  status,content,headers=req(participant,f'/?page=document&id={docs[0][0]}&download=1',raw=True);assert headers['Content-Disposition'].startswith('attachment;') and content==pdf
  status,content,headers=req(participant,f'/?page=document&id={docs[0][0]}',headers={'Range':'bytes=10-19'},raw=True);assert status==206 and content==pdf[10:20] and headers['Content-Range']==f'bytes 10-19/{len(pdf)}'
  status,content,_=req(participant,f'/?page=document&id={docs[0][0]}',headers={'Range':'bytes=-5'},raw=True);assert status==206 and content==pdf[-5:]
@@ -74,7 +77,7 @@ try:
  status,body,_=req(participant,'/?page=document&id=999');assert status==404
  status,body,_=req(participant,'/?page=documents');assert status==403
  status,body,_=post(participant,'/?page=me',{'action':'document_delete','id':docs[0][0]});assert status==403
- status,content,headers=req(primary,f'/?page=document&id={docs[1][0]}',raw=True);assert status==200 and headers['Content-Disposition'].startswith('attachment;')
+ status,content,headers=req(primary,f'/?page=document&id={docs[1][0]}',raw=True);assert status==200 and headers['Content-Disposition'].startswith('attachment;') and headers['Content-Security-Policy'].endswith('; sandbox')
  status,body,_=req(anon,f'/?page=document&id={docs[0][0]}');assert '%PDF' not in body and 'Admin-Anmeldung' in body
  # Changing release and deleting take effect immediately.
  _,body,_=req(primary,'/?page=documents');version=re.search(r'name="id" value="%d"><input type="hidden" name="version" value="(\d+)"'%docs[0][0],body).group(1)

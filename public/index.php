@@ -25,7 +25,9 @@ if(!$local && ($_SERVER['HTTPS']??'')!=='on') { http_response_code(400); exit('H
 header("Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
 header('X-Content-Type-Options: nosniff'); header('Referrer-Policy: no-referrer'); header('X-Frame-Options: DENY');
 header('Cache-Control: no-store, private'); header('X-Robots-Tag: noindex, nofollow');
-if(!$local) header('Strict-Transport-Security: max-age=31536000');
+header('Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=(), browsing-topics=()');
+header('Cross-Origin-Opener-Policy: same-origin'); header('Cross-Origin-Resource-Policy: same-origin');
+if(!$local) header('Strict-Transport-Security: max-age=31536000; includeSubDomains');
 // Only explicitly listed public branding assets are served without a session.
 $asset=$_GET['asset']??null;
 if($asset==='app-manifest-v1'){
@@ -54,8 +56,10 @@ if(is_string($asset)&&isset($publicAssets[$asset])){
     header('Content-Length: '.filesize($file));readfile($file);exit;
 }
 ini_set('session.use_strict_mode','1'); ini_set('session.use_only_cookies','1');
+// Own save path, so Ubuntu's sessionclean never sees it: PHP removes files untouched for longer than the absolute admin limit (12 h).
+ini_set('session.gc_maxlifetime','43200'); ini_set('session.gc_probability','1'); ini_set('session.gc_divisor','100');
 if(!is_dir($dataDir.'/sessions')) mkdir($dataDir.'/sessions',0700,true);
-session_save_path($dataDir.'/sessions'); session_name(TRAINING_PRODUCTION?'ausbildung_session':'ausbildung_dev_session');
+session_save_path($dataDir.'/sessions'); session_name(($local?'':'__Host-').(TRAINING_PRODUCTION?'ausbildung_session':'ausbildung_dev_session'));
 session_set_cookie_params(['lifetime'=>0,'path'=>'/','secure'=>!$local,'httponly'=>true,'samesite'=>'Strict']); session_start();
 $_SESSION['csrf']??=bin2hex(random_bytes(32));
 function h(mixed $v): string { return htmlspecialchars((string)$v,ENT_QUOTES|ENT_SUBSTITUTE,'UTF-8'); }
