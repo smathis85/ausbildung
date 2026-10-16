@@ -19,11 +19,15 @@ final class Documents
     ];
     /** Types a browser can show directly without running page scripts in our origin. */
     public const VIEWABLE=['pdf','png','jpg','jpeg','gif','webp','mp4','mp3','txt'];
+    /** Old Office formats can carry macros: no new uploads, existing files are still served. */
+    public const LEGACY=['doc','xls','ppt'];
     /** Detected content that is never accepted, whatever the extension says (active content). */
     private const BLOCKED=['text/html','application/xhtml+xml','image/svg+xml','text/xml','application/xml','text/javascript','application/javascript','text/x-php','application/x-php','application/x-httpd-php','application/x-executable','application/x-dosexec','application/x-sharedlib','application/x-mach-binary'];
     /** Viewable types whose content must match the extension. */
     private const EXPECTED=['pdf'=>['application/pdf'],'png'=>['image/png'],'jpg'=>['image/jpeg'],'jpeg'=>['image/jpeg'],'gif'=>['image/gif'],'webp'=>['image/webp']];
     public function __construct(private Store $store,private string $dir) {}
+    /** @return list<string> extensions accepted for new uploads */
+    public static function uploadable(): array { return array_values(array_diff(array_keys(self::TYPES),self::LEGACY)); }
     public static function viewable(array $doc): bool { return in_array($doc['extension'],self::VIEWABLE,true); }
     public static function size(int $bytes): string {
         if($bytes>=1048576)return number_format($bytes/1048576,1,',','.').' MB';
@@ -52,7 +56,8 @@ final class Documents
         if($size>self::MAX_BYTES)throw new RuntimeException('Die Datei ist zu groß (höchstens '.self::size(self::MAX_BYTES).').');
         $original=self::cleanName((string)($file['name']??''));
         $extension=strtolower(pathinfo($original,PATHINFO_EXTENSION));
-        if(!isset(self::TYPES[$extension]))throw new RuntimeException('Dieser Dateityp ist nicht erlaubt. Erlaubt: '.implode(', ',array_keys(self::TYPES)).'.');
+        if(in_array($extension,self::LEGACY,true))throw new RuntimeException('Alte Office-Formate (.doc, .xls, .ppt) können Makros enthalten. Bitte als .docx, .xlsx oder .pptx speichern und erneut hochladen.');
+        if(!isset(self::TYPES[$extension]))throw new RuntimeException('Dieser Dateityp ist nicht erlaubt. Erlaubt: '.implode(', ',self::uploadable()).'.');
         self::checkContent($file['tmp_name'],$extension);
         $title=trim($title)!==''?trim($title):pathinfo($original,PATHINFO_FILENAME);
         if(mb_strlen($title)>200||mb_strlen($description)>1000)throw new RuntimeException('Titel oder Beschreibung ist zu lang.');
@@ -108,8 +113,8 @@ final class Documents
         $size=(int)filesize($path);$inline=!$download&&self::viewable($doc);
         $fallback=preg_replace('/[^A-Za-z0-9._-]+/','_',$doc['original_name']);
         header_remove('Content-Security-Policy');
-        // Everything except PDF opens in an opaque origin; browser PDF viewers do not render reliably in a sandbox.
-        header("Content-Security-Policy: default-src 'none'; img-src 'self'; media-src 'self'; style-src 'unsafe-inline'; frame-ancestors 'none'".($doc['extension']==='pdf'?'':'; sandbox'));
+        // Opaque origin for everything. PDF on production only after the browser test on DEV (viewers may refuse sandboxed PDFs).
+        header("Content-Security-Policy: default-src 'none'; img-src 'self'; media-src 'self'; style-src 'unsafe-inline'; frame-ancestors 'none'".($doc['extension']==='pdf'&&TRAINING_PRODUCTION?'':'; sandbox'));
         header('Content-Type: '.self::TYPES[$doc['extension']]);
         header('Content-Disposition: '.($inline?'inline':'attachment').'; filename="'.$fallback.'"; filename*=UTF-8\'\''.rawurlencode($doc['original_name']));
         header('Accept-Ranges: bytes');

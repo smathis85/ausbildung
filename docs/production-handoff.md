@@ -1,6 +1,6 @@
 # Produktionsübernahme, 24.09.2026
 
-Explizit vom Benutzer für main/prod freigegeben. DNS ausbildung.einsatzleiter.app zeigt auf 31.70.130.202; vorhandenes Wildcard-Zertifikat passt. Noch kein eigener Produktions-vhost vorhanden (HTTP 200 vor Installation ist lediglich eine vorhandene Standard-Site und kein Nachweis der Bereitstellung).
+Für main/Prod freigegeben. DNS ausbildung.einsatzleiter.app zeigt auf 31.70.130.202; vorhandenes Wildcard-Zertifikat passt. Noch kein eigener Produktions-vhost vorhanden (HTTP 200 vor Installation ist lediglich eine vorhandene Standard-Site und kein Nachweis der Bereitstellung).
 
 Geprüft: gesamte Store- und HTTP-Suite auf isolierten künstlichen Daten in DEV- und Produktionsmodus. Passwortübernahme ohne Änderung, Sitzungsinvalidierung, wiederholte Übernahme wirkungslos, neuer Setupcode wenn DEV-Zugang noch nicht eingerichtet. Produktionsdarstellung ohne DEV-Kennzeichnung und mit eigenem Cookie. PHP- und Installer-Syntax fehlerfrei.
 

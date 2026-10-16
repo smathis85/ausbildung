@@ -1,6 +1,6 @@
 # Terminbuchung (Oktober 2026)
 
-Vom Benutzer gewünscht: Termine einstellen, auf die sich jeder ohne Passwort einbuchen kann (wie MS Bookings/cal.com), begrenzte Teilnehmerzahl, Bestätigung per E-Mail mit Link zum Stornieren und Umbuchen, Schutz gegen Spam/Bots per Code. Alles Einstellbare unter „Einstellungen“; dorthin sind auch Unterlagen, Importprüfung und Zugang gewandert (Unterreiter, Seitenadressen unverändert).
+Ziel: Termine einstellen, auf die sich jeder ohne Passwort einbuchen kann (wie MS Bookings/cal.com), begrenzte Teilnehmerzahl, Bestätigung per E-Mail mit Link zum Stornieren und Umbuchen, Schutz gegen Spam/Bots per Code. Alles Einstellbare unter „Einstellungen“; dorthin sind auch Unterlagen, Importprüfung und Zugang gewandert (Unterreiter, Seitenadressen unverändert).
 
 ## Bedienung
 
