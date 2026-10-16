@@ -113,8 +113,8 @@ final class Documents
         $size=(int)filesize($path);$inline=!$download&&self::viewable($doc);
         $fallback=preg_replace('/[^A-Za-z0-9._-]+/','_',$doc['original_name']);
         header_remove('Content-Security-Policy');
-        // Opaque origin for everything. PDF on production only after the browser test on DEV (viewers may refuse sandboxed PDFs).
-        header("Content-Security-Policy: default-src 'none'; img-src 'self'; media-src 'self'; style-src 'unsafe-inline'; frame-ancestors 'none'".($doc['extension']==='pdf'&&TRAINING_PRODUCTION?'':'; sandbox'));
+        // Every document opens in an opaque origin; PDF viewers tested on DEV (Oktober 2026).
+        header("Content-Security-Policy: default-src 'none'; img-src 'self'; media-src 'self'; style-src 'unsafe-inline'; frame-ancestors 'none'; sandbox");
         header('Content-Type: '.self::TYPES[$doc['extension']]);
         header('Content-Disposition: '.($inline?'inline':'attachment').'; filename="'.$fallback.'"; filename*=UTF-8\'\''.rawurlencode($doc['original_name']));
         header('Accept-Ranges: bytes');
